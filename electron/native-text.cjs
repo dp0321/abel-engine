@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const abelNames = require("./abel-copy.cjs");
 
 const LOCALES_DIR = path.join(__dirname, "..", "src", "locales");
 const LOCALE_FILE = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*\.json$/;
@@ -73,7 +74,8 @@ function createNativeText({ dir = LOCALES_DIR, saved = null, system = () => "", 
     language,
     t(key, params) {
       const own = pack(language())[key];
-      return fill(own ?? pack(ENGLISH)[key] ?? key, params);
+      const template = own ?? pack(ENGLISH)[key] ?? key;
+      return fill(abelNames.renames ? abelNames.abelCopy(key, template) : template, params);
     },
     set(code) {
       const before = language();

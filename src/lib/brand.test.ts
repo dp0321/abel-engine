@@ -69,6 +69,6 @@ describe("the tab icon", () => {
 // The title shows before /api/brand answers, and stays if that request fails.
 it.each(["index.html", "rail.html"])("%s starts with the product's name as its title", async (page) => {
   const html = readFileSync(new URL(`../../${page}`, import.meta.url), "utf8");
-  const { ABEL_DEFAULTS } = await vi.importActual<typeof import("../../shared/abel-defaults")>("../../shared/abel-defaults");
+  const { ABEL_DEFAULTS } = await vi.importActual<typeof import("../../packages/phone-protocol/src/abel-defaults")>("../../packages/phone-protocol/src/abel-defaults");
   expect(html).toContain(`<title>${ABEL_DEFAULTS.productName}</title>`);
 });

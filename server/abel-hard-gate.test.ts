@@ -18,7 +18,7 @@ import { createOutboundHold, type OutboundHoldDeps } from "./outbound-hold.ts";
 import { OutboundRequestService } from "./outbound-requests.ts";
 
 // server/testing/setup.ts gives upstream's tests upstream's values; this file checks the real ones.
-const { ABEL_DEFAULTS } = await vi.importActual<typeof import("../shared/abel-defaults.ts")>("../shared/abel-defaults.ts");
+const { ABEL_DEFAULTS } = await vi.importActual<typeof import("../packages/phone-protocol/src/abel-defaults.ts")>("../packages/phone-protocol/src/abel-defaults.ts");
 const HOOK = join(dirname(fileURLToPath(import.meta.url)), "hooks", "abel-gate-hook.ts");
 const gated = (tool: string, input?: unknown) => abelHardGate({ tool, input })?.kind ?? null;
 const emails = (n: number) => Array.from({ length: n }, (_, i) => `p${i}@example.com`);

@@ -18,7 +18,26 @@ command, environment variables (`OMB_*`) and the data folder (`~/.openmausbot`) 
 | Defaults below | `shared/abel-defaults.ts` |
 | Standing hard gates | `shared/abel-hard-gate.ts`, `server/hooks/abel-gate-hook.ts`, `server/drivers/claude-hook-command.ts` |
 
-Interface copy that names MausBot inside sentences (the locale files) is upstream text and is not rewritten here.
+The built-in helper bot a new place is given is **Abel Crew** (`ABEL_DEFAULTS.defaultBotName`). A helper seeded as
+"MausBot" by an earlier build is still recognised on upgrade (`LEGACY_DEFAULT_BOT_NAMES`, `seededHelperName`). Its name
+is not changed for you; rename it in its profile if you like.
+
+The interface copy keeps upstream's locale files untouched. Each line is renamed as it is read (`shared/abel-copy.ts` for
+the app and server lines, `electron/abel-copy.cjs` for the desktop's own words, both reading
+`electron/abel-copy-keys.json`):
+- "OpenMausBot", and "MausBot" in its product sense, read "Abel Engine";
+- "MausBot" in its helper sense reads "Abel Crew", for example the talk panel, "MausBot decides" and "your own MausBot";
+- bots' system prompt names the app "Abel Engine" and the helper "Abel Crew" (`server/system-prompt.ts`).
+
+Left on purpose, because they name upstream's own services or team:
+- "MausBot Cloud", "MausBot Relay" and the MausBot phone app (the phone-update and phone-link lines);
+- bug reports "to the MausBot team" (`@devs` reports still go to upstream);
+- sponsor, Product Hunt, Cloud purchase and cancel, and update-consent copy (sponsor offers are off).
+
+Also left, as a follow-up: about 700 hard-coded English strings that name OpenMausBot or MausBot in server and desktop
+code outside the locale files. These are CLI output, error and refusal texts, tool descriptions and prompt pieces
+outside `system-prompt.ts`. Rewriting them in place would touch about 150 upstream files and their tests. The Documents ›
+MausBot output folder and the helper app bundle names are paths, not copy, and stay as they are.
 
 ## Defaults: `shared/abel-defaults.ts`
 

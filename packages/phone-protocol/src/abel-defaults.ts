@@ -2,6 +2,8 @@
 export const ABEL_DEFAULTS = {
   /** The name a person reads in titles, onboarding and settings. */
   productName: "Abel Engine",
+  /** The built-in helper bot every new place is given (upstream: "MausBot", still recognised on upgrade). */
+  defaultBotName: "Abel Crew",
   /** The level every bot and thread starts at on a standalone server or the desktop. A shared company (hosted) workspace
    * keeps upstream's Ask. */
   approvalMode: "full",
