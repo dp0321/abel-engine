@@ -9,9 +9,9 @@ import { removeTempDir } from "./cleanup.ts";
 
 // Upstream's tests assert upstream's name, analytics and sponsor cards; Abel Engine's own values are asserted, unmocked, in
 // server/abel-hard-gate.test.ts.
-vi.mock("../../shared/abel-defaults.ts", async (original) => {
-  const real = await original<typeof import("../../shared/abel-defaults.ts")>();
-  return { ...real, ABEL_DEFAULTS: { ...real.ABEL_DEFAULTS, productName: "MausBot", analytics: true, sponsorOffers: true, upstreamFetches: true } };
+vi.mock("../../packages/phone-protocol/src/abel-defaults.ts", async (original) => {
+  const real = await original<typeof import("../../packages/phone-protocol/src/abel-defaults.ts")>();
+  return { ...real, ABEL_DEFAULTS: { ...real.ABEL_DEFAULTS, productName: "MausBot", defaultBotName: "MausBot", analytics: true, sponsorOffers: true, upstreamFetches: true } };
 });
 
 const home = mkdtempSync(join(tmpdir(), "omb-test-home-"));

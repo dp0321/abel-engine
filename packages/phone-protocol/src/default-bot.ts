@@ -1,9 +1,18 @@
+import { ABEL_DEFAULTS } from "./abel-defaults.ts";
 import type { HelperFollowupField } from "./helper-followup.ts";
 import type { MausColor } from "./wire.ts";
 
 /** MausBot: every person's built-in helper. A new install's first bot (its Chief of Staff too); an existing place or
  * person without one is given one once. It can be renamed and recoloured, hidden from the sidebar, never deleted. */
-export const DEFAULT_BOT_NAME = "MausBot";
+export const DEFAULT_BOT_NAME: string = ABEL_DEFAULTS.defaultBotName;
+/** Names a seeded helper had under earlier builds; an upgrade still finds the place's own helper by them. */
+export const LEGACY_DEFAULT_BOT_NAMES: readonly string[] = ["MausBot"];
+
+/** Is this the name a place's built-in helper was seeded with, by this build or an earlier one? */
+export function seededHelperName(name: string): boolean {
+  const plain = name.trim().toLowerCase();
+  return [DEFAULT_BOT_NAME, ...LEGACY_DEFAULT_BOT_NAMES].some((seeded) => seeded.toLowerCase() === plain);
+}
 export const DEFAULT_BOT_COLOR: MausColor = "chrome";
 
 export interface DefaultBotMark {

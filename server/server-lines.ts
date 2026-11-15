@@ -4,6 +4,7 @@
 // bundles only the "server." keys (scripts/server-locale-plugin.mjs). Text only a model reads stays English and never
 // comes from here. A guard beside the packs (server-lines.test.ts) fails on an English line written straight into one.
 import en from "../src/locales/en.json" with { type: "json" };
+import { abelCopy } from "../shared/abel-copy.ts";
 import { byLanguage } from "./language.ts";
 
 export type ServerLineKey = Extract<keyof typeof en, `server.${string}`>;
@@ -20,7 +21,7 @@ export function addServerLinePacks(more: Readonly<Record<string, Pack>>): void {
 /** The line in `language` (a language tag; undefined reads as English), with each `{name}` filled from `params`. A key
  * the language has no words for yet reads in English, as the app's own screens do. */
 export function serverLine(language: string | undefined, key: ServerLineKey, params?: Readonly<Record<string, string | number>>): string {
-  const template = byLanguage(packs, language)[key] ?? ENGLISH[key] ?? key;
+  const template = abelCopy(key, byLanguage(packs, language)[key] ?? ENGLISH[key] ?? key);
   return params ? template.replace(/\{(\w+)\}/g, (match, name: string) => (Object.hasOwn(params, name) ? String(params[name]) : match)) : template;
 }
 
@@ -41,7 +42,7 @@ function matcherOf(template: string): RegExp {
 export function isServerLine(key: ServerLineKey, text: string): boolean {
   return Object.values(packs).some((pack) => {
     const template = pack[key];
-    return template !== undefined && matcherOf(template).test(text);
+    return template !== undefined && (matcherOf(abelCopy(key, template)).test(text) || matcherOf(template).test(text));
   });
 }
 
