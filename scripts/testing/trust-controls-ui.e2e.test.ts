@@ -75,6 +75,9 @@ describe("trust controls in the real renderer", () => {
     expect(profile).toBeDefined();
     await ui("click", "--ref", `@${profile![0]}`);
     await click("Permissions");
+    // Abel starts on Send without asking, so the rule is set to Ask first and back.
+    await click("Ask every time");
+    await expect.poll(async () => (await saved()).outbound, { timeout: 10_000 }).toEqual({ policy: "ask" });
     await click("Send without asking");
     await expect.poll(async () => (await saved()).outbound, { timeout: 10_000 }).toEqual({ policy: "allow" });
     expect(await evaluate("[...document.querySelectorAll('div')].find(el => el.firstElementChild?.textContent === 'Sending on your behalf')?.querySelectorAll('input').length")).toBe(0);
