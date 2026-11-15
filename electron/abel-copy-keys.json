@@ -1,10 +1,36 @@
 {
-  "keepPrefixes": ["server.reports.", "productHunt.", "boatOffer.", "modelgoOffer.", "cloudBuy.", "cloudCancel.", "updatesConsent.", "phoneUpdate."],
-  "keepKeys": ["remote.devices.retired", "native.connect.phoneLink"],
-  "botPrefixes": ["native.talk.", "settings.talk."],
+  "keepPrefixes": [
+    "server.reports.",
+    "productHunt.",
+    "boatOffer.",
+    "modelgoOffer.",
+    "cloudBuy.",
+    "cloudCancel.",
+    "updatesConsent.",
+    "phoneUpdate."
+  ],
+  "keepKeys": [
+    "remote.devices.retired",
+    "native.connect.phoneLink",
+    "files.outputs.help",
+    "native.lend.own.detail",
+    "native.lend.terminalDetail"
+  ],
+  "botPrefixes": [
+    "native.talk.",
+    "settings.talk."
+  ],
   "botKeys": [
-    "whatsNew.team.bodyInbox", "whatsNew.team.picture", "teamSettings.skip.ownMausBot", "room.panel.responder.auto",
-    "room.panel.responder.autoOption", "teamWelcome.noBots", "serverError.owner.personal", "serverError.setup.mausbotMissing",
-    "serverError.setup.mausbotOwnerOnly", "serverError.share.ownBot", "teamMove.staysOnMyCloud"
+    "whatsNew.team.bodyInbox",
+    "whatsNew.team.picture",
+    "teamSettings.skip.ownMausBot",
+    "room.panel.responder.auto",
+    "room.panel.responder.autoOption",
+    "teamWelcome.noBots",
+    "serverError.owner.personal",
+    "serverError.setup.mausbotMissing",
+    "serverError.setup.mausbotOwnerOnly",
+    "serverError.share.ownBot",
+    "teamMove.staysOnMyCloud"
   ]
 }

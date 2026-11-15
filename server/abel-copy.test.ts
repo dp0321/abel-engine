@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 
@@ -43,11 +44,24 @@ describe("Abel Engine's names in upstream's copy", () => {
   });
 
   it("leaves no product or helper MausBot in English copy outside what it keeps on purpose", () => {
-    const kept = /^(server\.reports\.|productHunt\.|boatOffer\.|modelgoOffer\.|cloudBuy\.|cloudCancel\.|updatesConsent\.|phoneUpdate\.)|^(remote\.devices\.retired|native\.connect\.phoneLink)$/;
+    const kept = /^(server\.reports\.|productHunt\.|boatOffer\.|modelgoOffer\.|cloudBuy\.|cloudCancel\.|updatesConsent\.|phoneUpdate\.)|^(remote\.devices\.retired|native\.connect\.phoneLink|files\.outputs\.help|native\.lend\.own\.detail|native\.lend\.terminalDetail)$/;
     const left = Object.entries(en as Record<string, string>)
       .filter(([key]) => !kept.test(key))
       .filter(([key, text]) => /OpenMausBot|\bMausBot\b(?! (?:Cloud|Relay)\b)/.test(abelCopy(key, text)));
     expect(left).toEqual([]);
+  });
+
+  it("never renames a folder, path or on-screen name to one the code does not use", () => {
+    const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    const outputs = /path\.join\(documentsDir, "([^"]+)"\)/.exec(read("electron/cloud-sync.mjs"))?.[1];
+    const tray = /tray\.setToolTip\("([^"]+)"\)/.exec(read("electron/system-tray.mjs"))?.[1];
+    expect(outputs).toBe("MausBot");
+    const lines = Object.entries(en as Record<string, string>).map(([key, text]) => [key, abelCopy(key, text)] as const);
+    for (const [key, text] of lines) {
+      for (const folder of text.matchAll(/Documents › ([^,.;\s]+)/g)) expect(folder[1], key).toBe(outputs);
+      for (const icon of text.matchAll(/the (\S+) icon/g)) if (/MausBot|Abel/.test(icon[1]!)) expect(icon[1], key).toBe(tray);
+    }
+    expect(read("server/system-prompt.ts")).toContain(`Documents › ${outputs}`);
   });
 
   it("the desktop's CommonJS copy reads every English line the same", () => {

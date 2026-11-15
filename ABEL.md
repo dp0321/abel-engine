@@ -33,6 +33,10 @@ Left on purpose, because they name upstream's own services or team:
 - "MausBot Cloud", "MausBot Relay" and the MausBot phone app (the phone-update and phone-link lines);
 - bug reports "to the MausBot team" (`@devs` reports still go to upstream);
 - sponsor, Product Hunt, Cloud purchase and cancel, and update-consent copy (sponsor offers are off).
+- lines that name a real folder or on-screen name the code still uses: "Documents › MausBot" (the desktop's output
+  folder, `electron/cloud-sync.mjs`) and "the OpenMausBot icon's menu" (the tray icon's tooltip,
+  `electron/system-tray.mjs`). `server/abel-copy.test.ts` fails if a renamed line names a folder or icon the code does
+  not use.
 
 Also left, as a follow-up: about 700 hard-coded English strings that name OpenMausBot or MausBot in server and desktop
 code outside the locale files. These are CLI output, error and refusal texts, tool descriptions and prompt pieces
