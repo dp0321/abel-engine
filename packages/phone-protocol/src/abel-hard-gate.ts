@@ -135,13 +135,33 @@ function typesACredential(action: string[], input: unknown): boolean {
   return found;
 }
 
-const HTTP_CALL = /(\b(curl|wget|https?|xhs?|httpx|urllib|axios)\b|https?:\/\/|fetch\(|requests\.\w+\(|Invoke-(RestMethod|WebRequest))/i;
-const WRITE_METHOD = /(-X\s*['"]?(POST|PUT|PATCH|DELETE)\b|--request[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|(^|\s)(-d|--data(-raw|-binary|-urlencode|-ascii)?|--json|-F|--form|--post-data|--post-file|--body-data|--body-file)(\s|=)|--method[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|\b(https?|xhs?)\s+(-{1,2}[\w-]+(=\S+)?\s+)*(POST|PUT|PATCH|DELETE)\s|\.(post|put|patch|delete)\(|method\s*[:=]\s*['"]?(POST|PUT|PATCH|DELETE)\b|\b(POST|PUT|PATCH|DELETE)\s+https?:|\burlopen\([^)]*\bdata\s*=|\bRequest\([^)]*\bdata\s*=|\burlopen\(\s*[\w.]+\s*,\s*[^)\s])/i;
+const HTTP_CALL = /(\b(curl|wget|https?|xhs?|httpx|urllib|axios|aiohttp|requests)\b|https?:\/\/|fetch\(|Invoke-(RestMethod|WebRequest))/i;
+/** A method that writes, in any client: curl/wget/httpie/xh flags, a library's post/put/patch/delete, `method: POST`. */
+const EXPLICIT_WRITE = /(-X\s*['"]?(POST|PUT|PATCH|DELETE)\b|--request[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|--method[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|\b(https?|xhs?)\s+(-{1,2}[\w-]+(=\S+)?\s+)*(POST|PUT|PATCH|DELETE)\s|\.(post|put|patch|delete)\s*\(|\.request\(\s*['"]?(POST|PUT|PATCH|DELETE)\b|method\s*[:=]\s*['"]?(POST|PUT|PATCH|DELETE)\b|\b(POST|PUT|PATCH|DELETE)\s+https?:|\burlopen\([^)]*\bdata\s*=|\bRequest\([^)]*\bdata\s*=|\burlopen\(\s*[\w.]+\s*,\s*[^)\s]|-Method\s+['"]?(Post|Put|Patch|Delete)\b)/i;
+/** A request body. Case-sensitive: curl's -D dumps headers, -G sends -d as a query string (a read). */
+const DATA_FLAG = /(^|\s)(-d|--data(-raw|-binary|-urlencode|-ascii)?|--json|-F|--form|--post-data|--post-file|--body-data|--body-file)(\s|=|['"@])/;
+const GET_FLAG = /(^|\s)(-G|--get)(\s|$)/;
+
+/** Does this command send an HTTP write, however its address was built? */
+export function httpWrite(command: string): boolean {
+  return HTTP_CALL.test(command) && (EXPLICIT_WRITE.test(command) || (DATA_FLAG.test(command) && !GET_FLAG.test(command)));
+}
+
+const PAPER_HOST = /^(api-fxpractice\.oanda\.com|stream-fxpractice\.oanda\.com|paper-api\.alpaca\.markets|sandbox\.tradier\.com|api\.cert\.tastyworks\.com)$/i;
+
+/** Every address in the command is a broker's paper/practice host and nothing is left unexpanded that could be another. */
+function paperOnly(command: string): boolean {
+  const hosts = [...command.matchAll(/https?:\/\/([^/\s:'"]+)/gi)].map((match) => match[1]!);
+  return hosts.length > 0 && hosts.every((host) => PAPER_HOST.test(host)) && !/\$|\{\w+\}/.test(command);
+}
+
+/** The backstop: words that name an order, a flatten or a live switch anywhere in a write. */
+const TRADE_WORDS = /\b(orders?|flatten\w*|go[-_]?live|golive)\b|[/=:]\s*live\b|\blive[-_]?(mode|trading)\b/i;
 
 interface CommandRule { kind: HardGateKind; label: string; test: (command: string) => boolean }
 
 const COMMAND_RULES: CommandRule[] = [
-  { kind: "trade", label: "a trading order (Total /api/orders)", test: (c) => /\/api\/orders\b/i.test(c) && HTTP_CALL.test(c) && WRITE_METHOD.test(c) },
+  { kind: "trade", label: "a trading order (Total /api/orders)", test: (c) => /\/api\/orders\b/i.test(c) && httpWrite(c) },
   { kind: "trade", label: "flattening positions", test: (c) => /flatten/i.test(c) && HTTP_CALL.test(c) },
   {
     kind: "live-trading", label: "a live trading switch",
@@ -152,13 +172,17 @@ const COMMAND_RULES: CommandRule[] = [
   },
   {
     kind: "trade", label: "a live broker order",
-    test: (c) => /(api-fxtrade\.oanda\.com|(?<![\w-])api\.alpaca\.markets|api\.tradier\.com|api\.tastyworks\.com|api\.schwabapi\.com)/i.test(c) && WRITE_METHOD.test(c),
+    test: (c) => /(api-fxtrade\.oanda\.com|(?<![\w-])api\.alpaca\.markets|api\.tradier\.com|api\.tastyworks\.com|api\.schwabapi\.com)/i.test(c) && httpWrite(c),
   },
   {
     kind: "money", label: "a payment or money move",
-    test: (c) => (/api\.stripe\.com\/v1\/(charges|payment_intents|refunds|transfers|payouts|topups|invoices\/[^\s/]+\/pay)/i.test(c) && WRITE_METHOD.test(c)) ||
+    test: (c) => (/api\.stripe\.com\/v1\/(charges|payment_intents|refunds|transfers|payouts|topups|invoices\/[^\s/]+\/pay)/i.test(c) && httpWrite(c)) ||
       /\bstripe\s+(charges|payment_intents|refunds|transfers|payouts|topups)\s+(create|capture|confirm)\b/i.test(c) ||
-      /(api(-m)?\.paypal\.com\/v[12]\/(payments|checkout\/orders|payouts))/i.test(c) && WRITE_METHOD.test(c),
+      /(api(-m)?\.paypal\.com\/v[12]\/(payments|checkout\/orders|payouts))/i.test(c) && httpWrite(c),
+  },
+  {
+    kind: "trade", label: "a write that names an order, a flatten or a live switch",
+    test: (c) => httpWrite(c) && TRADE_WORDS.test(c) && !paperOnly(c),
   },
   {
     kind: "credential", label: "typing a password or credential",
@@ -178,10 +202,48 @@ function commandOf(tool: string, input: unknown): string | undefined {
   return undefined;
 }
 
-/** The command as the shell and the server would read it: quotes the shell joins and backslashes dropped, percent-escapes
- * decoded, `/./`, `//` and `/x/../` collapsed. Rules match the raw line and this one. */
+/** Escapes a shell, Python or JavaScript string would turn into characters: \xHH, \uHHHH, \u{H…}, octal \NNN, chr(N),
+ * String.fromCharCode(N, …). */
+function decodeEscapes(text: string): string {
+  return text
+    .replace(/\\u\{([0-9a-f]{1,6})\}/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/\\u([0-9a-f]{4})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\\x([0-9a-f]{1,2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\\0?([0-7]{1,3})/g, (_, oct: string) => String.fromCharCode(parseInt(oct, 8)))
+    .replace(/\bchr\(\s*(\d{1,7})\s*\)/g, (_, code: string) => `'${String.fromCodePoint(Number(code))}'`)
+    .replace(/\bString\.fromCharCode\(\s*([\d\s,]+)\)/g, (_, codes: string) => `'${codes.split(",").map((n) => String.fromCharCode(Number(n.trim()))).join("")}'`);
+}
+
+const SHELL_ASSIGN = /(?:^|[\s;&|(`])(?:export\s+|declare\s+(?:-\w+\s+)*|local\s+|readonly\s+)?([A-Za-z_]\w*)=(?:'([^']*)'|"([^"]*)"|([^\s;&|)`]*))/g;
+const CODE_ASSIGN = /\b([A-Za-z_]\w*)\s*=\s*[fbrFBR]?(['"`])((?:(?!\2)[^\n])*)\2/g;
+
+/** Variables assigned in this same command, shell or Python/JavaScript, expanded where they are used: $V, ${V}, ${V:-x},
+ * an f-string's {V} and a bare V joined with +. Unknown names are left as written. */
+function expandVariables(text: string): string {
+  const vars = new Map<string, string>();
+  for (const match of text.matchAll(SHELL_ASSIGN)) vars.set(match[1]!, match[2] ?? match[3] ?? match[4] ?? "");
+  for (const match of text.matchAll(CODE_ASSIGN)) if (!vars.has(match[1]!)) vars.set(match[1]!, match[3] ?? "");
+  let out = text;
+  for (let pass = 0; pass < 4; pass++) {
+    const before = out;
+    out = out
+      .replace(/\$\{([A-Za-z_]\w*)(?::?[-=+?]([^}]*))?\}/g, (whole, name: string, fallback?: string) => vars.get(name) ?? fallback ?? whole)
+      .replace(/\$([A-Za-z_]\w*)/g, (whole, name: string) => vars.get(name) ?? whole)
+      .replace(/\{([A-Za-z_]\w*)\}/g, (whole, name: string) => vars.get(name) ?? whole)
+      .replace(/\b([A-Za-z_]\w*)\b(?=\s*\+)|(?<=\+\s*)\b([A-Za-z_]\w*)\b/g, (whole, left?: string, right?: string) => vars.get(left ?? right ?? "") ?? whole);
+    if (out === before) break;
+  }
+  return out;
+}
+
+/** The command as the shell and the server would read it: ANSI-C $'…' and \x/\u/octal/chr() escapes decoded, $IFS read as
+ * a space, variables assigned in the same command expanded, joined quotes, backslashes and string `+` dropped,
+ * percent-escapes decoded, `/./`, `//` and `/x/../` collapsed. Rules match the raw line and this one. */
 export function normalizedCommand(command: string): string {
-  let text = command.replace(/['"\\]/g, "");
+  let text = command.replace(/\$'((?:[^'\\]|\\.)*)'/g, (_, inner: string) => decodeEscapes(inner));
+  text = decodeEscapes(text).replace(/\$\{IFS\}|\$IFS\b/g, " ").replace(/\$[0-9@*#?!-]/g, "");
+  text = expandVariables(text);
+  text = text.replace(/['"`\\]/g, "").replace(/\s*\+\s*/g, "");
   for (let i = 0; i < 3; i++) text = text.replace(/%([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
   let previous = "";
   while (previous !== text) {

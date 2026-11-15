@@ -36,9 +36,21 @@ One module, `ABEL_DEFAULTS` (it lives in `packages/phone-protocol/src/abel-defau
 | `bindHost` | `"127.0.0.1"` | The server listens on loopback only; `serve --lan` and `OMB_LAN=1` are refused. Reach it from elsewhere with `--tunnel`, `--tailscale`, `--domain` or `--public-url`, each behind pairing. |
 | `analytics` | `false` | No product analytics until the person turns them on in Settings → General (`src/lib/analytics.ts`) |
 | `sponsorOffers` | `false` | No Boat credit card, no ModelGo offer, no upstream announcements feed (which carries sponsor cards). Your own Composio, your own keys and local CLIs are untouched. Upstream's managed Composio broker (desktop registration, Cloud home) is off unless `ABEL_MANAGED_COMPOSIO=1` (`electron/managed-composio.mjs`). |
-| `upstreamFetches` | `false` | No pull of upstream's model manifest (the bundled copy stands) and no update check; when turned on, the update check reads dp0321/abel-engine and never suggests `npm install -g openmausbot` |
+| `upstreamFetches` | `false` | Background calls off: upstream's model manifest (the bundled copy stands), the Codex CLI version lookup at registry.npmjs.org (`server/drivers/codex-release.ts`) and the update check. When on, the update check reads dp0321/abel-engine and never suggests `npm install -g openmausbot` |
 | `hardGates` | `true` | The standing hard gates below |
 | `massSendRecipients` | `25` | More recipients than this in one send, or more sends than this in one batch, is a mass send |
+
+### Upstream servers contacted only when you use the feature
+
+Nothing below runs in the background:
+
+- **Account sign-in and companion pairing:** `openmausbot login`, `serve --tunnel` / `--relay`, the desktop's account
+  and companion sign-in, and email sign-in codes without your own SMTP. These go to upstream's control plane
+  (`accounts.openmausbot.com`, `server/account-signin.ts`, `electron/companion-account-service.mjs`) unless
+  `OMB_CONTROL_PLANE_URL` points elsewhere. Set `OMB_SIGNIN_SMTP_URL` to send codes yourself.
+- **`openmausbot doctor --host`:** its clock check sends one HEAD request to `https://cloud.openmausbot.com`
+  (`server/headless/host-doctor.ts`). Plain `doctor` talks only to your own server.
+- **Managed Composio broker:** only with `ABEL_MANAGED_COMPOSIO=1`.
 
 ## Standing hard gates
 
@@ -58,7 +70,25 @@ under every saved rule ("Send without asking", saved commands, always-allow) —
   into a field labelled password or one-time code; `security add-generic-password`, `op item create`, `--password=…`,
   `sshpass`, `passwd`, `sudo -S`.
 
-Reads (get, list, fetch, search…) never gate. Shell lines are also matched after normalizing what the shell and server
+Reads (get, list, fetch, search…) never gate.
+
+The backstop covers an address built at run time. Any HTTP write gates when its decoded text names an order, a flatten
+or a live switch (`order(s)`, `flatten…`, `go-live`, `go_live`, `golive`, `/live`, `mode=live`, `live_mode`), however the
+URL was put together. An HTTP write is any of:
+- curl, wget, httpie or xh with a write method or a request body (`-G` makes `-d` a read);
+- requests, httpx, aiohttp, axios or fetch calling post, put, patch or delete, or setting `method: POST`;
+- urllib with a body.
+
+Only a write whose every address is a broker's paper or practice host is exempt. Before matching, the command is decoded
+and expanded:
+- `$'…'` ANSI-C quoting, plus `\x`, `\u`, octal, `chr()` and `String.fromCharCode()` escapes, are decoded;
+- `$IFS` and `${IFS}` read as a space;
+- variables assigned in the same command are expanded: shell `VAR=…` and `export VAR=…`, and Python or JavaScript
+  `name = '…'`, used as `$V`, `${V}`, `${V:-x}`, an f-string's `{V}` or a `+` join.
+
+A consequence: any HTTP POST whose body mentions an order (say, a message text) also asks.
+
+Shell lines are also matched after normalizing what the shell and server
 would read: joined quotes (`or''ders`, `"or"ders`) and backslashes dropped, percent-escapes decoded (twice-encoded
 too), and `/./`, `//` and `/x/../` collapsed. The Claude Code hook fails closed: a call it cannot finish checking within
 3.5 s gets "ask".

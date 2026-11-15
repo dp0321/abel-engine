@@ -1,3 +1,5 @@
+import { ABEL_DEFAULTS } from "../../shared/abel-defaults.ts";
+
 // Release freshness is independent of account-specific model availability.
 function parseCodexReleaseVersion(value: string): { parts: number[]; prerelease: boolean } | null {
   const match = /^(?:.*\bcodex-cli\s+)?v?(\d+)\.(\d+)\.(\d+)(-[0-9a-z.-]+)?(?:\+[0-9a-z.-]+)?$/i.exec(value.trim());
@@ -42,4 +44,5 @@ export function createCodexReleaseReader(fetchImpl: typeof fetch = fetch, now = 
   };
 }
 
-export const readLatestCodexRelease = createCodexReleaseReader();
+// Abel Engine: no lookup at registry.npmjs.org unless ABEL_DEFAULTS.upstreamFetches is on; no answer means "not behind".
+export const readLatestCodexRelease = ABEL_DEFAULTS.upstreamFetches ? createCodexReleaseReader() : async (): Promise<string | null> => null;

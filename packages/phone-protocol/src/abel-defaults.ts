@@ -21,7 +21,8 @@ export const ABEL_DEFAULTS = {
   analytics: false,
   /** Sponsor offers (Boat credit, ModelGo) and the upstream announcements feed that carries sponsor cards. */
   sponsorOffers: false,
-  /** Background pulls from upstream's servers: the model manifest and the update check (which reads dp0321/abel-engine
+  /** Background pulls from other servers: upstream's model manifest, the Codex CLI's latest version at registry.npmjs.org,
+   * and the update check (which reads dp0321/abel-engine
    * when on). Off: the bundled manifest stands and no update is looked for. Upstream's managed Composio broker is off
    * separately, unless ABEL_MANAGED_COMPOSIO=1 (electron/managed-composio.mjs). */
   upstreamFetches: false,

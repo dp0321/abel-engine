@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { abelHardGate, abelHardGateForCalls, abelPreToolUseOutput, commandHardGate, recipientCount } from "../shared/abel-hard-gate.ts";
+import { abelHardGate, abelHardGateForCalls, abelPreToolUseOutput, commandHardGate, normalizedCommand, recipientCount } from "../shared/abel-hard-gate.ts";
 import { DEFAULT_APPROVAL_MODE } from "../shared/approval-mode.ts";
 import { DEFAULT_OUTBOUND_POLICY } from "../shared/outbound.ts";
 import { autoVerdict } from "./auto-approve.ts";
@@ -172,6 +172,50 @@ describe("commandHardGate on shell commands", () => {
     "python -c 'import numpy as np; np.array([[1]]).flatten()'",
   ])("%s runs without asking", (command) => {
     expect(commandHardGate(command)).toBeNull();
+  });
+});
+
+describe("an address built at run time still gates (expand, decode, then the write backstop)", () => {
+  const kind = (command: string) => abelHardGate({ tool: "Bash", input: { command } })?.kind ?? null;
+  it.each([
+    ["BASE=http://127.0.0.1:8080/api; curl -X POST \"$BASE/orders\" -d qty=1", "trade"],
+    ["export API=http://127.0.0.1:8080/api && curl -X POST ${API}/orders --json '{}'", "trade"],
+    ["curl -X POST \"${API:-http://127.0.0.1:8080/api}/orders\" -d qty=1", "trade"],
+    ["python3 -c \"import requests; BASE='http://127.0.0.1:8080/api'; requests.post(f'{BASE}/orders', json={})\"", "trade"],
+    ["python3 -c \"import requests; b='http://127.0.0.1:8080/api'; requests.post(b+'/orders', json={})\"", "trade"],
+    ["curl -X POST \"$BASE/go-live\"", "trade"],
+    ["P=orders; curl -X POST http://127.0.0.1:8080/api/$P -d qty=1", "trade"],
+    ["curl -X POST http://127.0.0.1:8080/api$'\\x2f'orders -d qty=1", "trade"],
+    ["curl -X POST http://127.0.0.1:8080/api/$'\\157'rders -d qty=1", "trade"],
+    ["curl -X POST \"http://127.0.0.1:8080/api/\\x6frders\" -d qty=1", "trade"],
+    ["python3 -c \"import requests; requests.post('http://127.0.0.1:8080/api/' + chr(111) + 'rders', json={})\"", "trade"],
+    ["node -e \"fetch('http://127.0.0.1:8080/api/\\u006frders', { method: 'POST', body: '{}' })\"", "trade"],
+    ["node -e \"fetch('http://127.0.0.1:8080/api/' + String.fromCharCode(111) + 'rders', { method: 'POST' })\"", "trade"],
+    ["curl${IFS}-X${IFS}POST${IFS}http://127.0.0.1:8080/api/orders${IFS}-d${IFS}qty=1", "trade"],
+    ["curl -X POST \"$(printf 'http://127.0.0.1:8080/api/%s' orders)\" -d qty=1", "trade"],
+    ["curl -X POST \"$(printf 'http://127.0.0.1:8080/api/\\x6frders')\" -d qty=1", "trade"],
+    ["python3 -c \"import aiohttp, asyncio; asyncio.run(aiohttp.ClientSession().post(URL + '/order'))\"", "trade"],
+    ["curl -X POST \"$HOST/api/flatten_all\"", "trade"],
+    ["curl -X PUT \"$HOST/api/mode\" -d mode=live", "trade"],
+  ])("%s asks", (command, expected) => {
+    expect(kind(command)).toBe(expected);
+  });
+
+  it.each([
+    "curl $BASE/orders",
+    "BASE=http://127.0.0.1:8080/api; curl -s \"$BASE/orders?status=open\"",
+    "curl -G http://127.0.0.1:8080/api/orders -d status=open",
+    "python3 -c \"import requests; print(requests.get('http://127.0.0.1:8080/api/orders').json())\"",
+    "node -e \"fetch('http://127.0.0.1:8080/api/orders').then(r => r.json())\"",
+    "curl -X POST https://example.com/api/messages -d text=hello",
+  ])("%s runs without asking", (command) => {
+    expect(kind(command)).toBeNull();
+  });
+
+  it("normalizes what the shell would run", () => {
+    expect(normalizedCommand("P=orders; curl -X POST http://h/api/$P")).toContain("http://h/api/orders");
+    expect(normalizedCommand("curl${IFS}-X${IFS}POST")).toBe("curl -X POST");
+    expect(normalizedCommand("echo $'\\x2f'$'\\157'")).toBe("echo /o");
   });
 });
 
