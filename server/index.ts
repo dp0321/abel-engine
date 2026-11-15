@@ -545,7 +545,7 @@ import {
   resolveRequestAuth,
   parseCookies,
   serializeSessionCookie,
-  sessionCookieName, ownerOrAdmin, acceptLegacyOrigins,
+  sessionCookieName, ownerOrAdmin, acceptLegacyOrigins, mayApproveHardGate, ABEL_HARD_GATE_APPROVER,
 } from "./request-auth.ts";
 import { cookieMaxAgeSeconds, formatPairingCode, pairingRequest, SessionRegistry, type SessionRecord } from "./sessions.ts"; import type { PairingErrorCode } from "../shared/pairing-code.ts";
 import { ThreadStarters } from "./thread-starters.ts"; import { createConversationShares } from "./host/conversation-shares.ts"; import { createTeamMemorySaves } from "./host/team-memory-saves.ts"; import { createConversationSharing } from "./routes/conversation-share.ts";
@@ -765,7 +765,7 @@ const DESKTOP_MANAGED = process.env.OMB_DESKTOP_PARENT === "1";
 const SHARED_WORKSPACE_FULL_ACCESS = sharedWorkspaceFullAccessConfigured();
 const sharedWorkspaceFullAccessEnabled = () => SHARED_WORKSPACE_FULL_ACCESS && Boolean(workspaceAccess) && entitled("admin");
 const HOSTED_FULL_ACCESS_REFUSAL = "On a shared company workspace Full access comes only from the operator's dedicated policy";
-setDefaultApprovalMode(ABEL_DEFAULTS.approvalMode);
+setDefaultApprovalMode(HOSTED_WORKSPACE ? "ask" : ABEL_DEFAULTS.approvalMode);
 // On a shared workspace loopback is a service, not the owner: every bot's shell is a loopback caller too.
 const LOOPBACK = resolveLoopbackTrust({ desktopManaged: DESKTOP_MANAGED, hostedWorkspace: HOSTED_WORKSPACE, cloudHome: Boolean(CLOUD_HOME), fromSource: import.meta.url.endsWith(".ts") });
 // The CLI's per-launch secret comes on stdin, never an env var: every engine this server starts inherits its environment.
@@ -1064,7 +1064,7 @@ function cloudCardRefusal(auth: RequestAuth & { kind: "session" }): string | nul
 }
 
 /** Decides only whose answer to an existing card counts; it adds no card, gate or prompt. */
-function cardAnswerRefusal(auth: RequestAuth, threadId: string, requestId: string, behavior: string): string | null {
+function cardAnswerRefusal(auth: RequestAuth, threadId: string, requestId: string, behavior: string): string | null { if (behavior !== "deny" && store.messagesFor(threadId).find((line) => line.card?.requestId === requestId)?.card?.hardGate && !mayApproveHardGate(auth)) return ABEL_HARD_GATE_APPROVER;
   if (auth.kind === "loopback") {
     return auth.trust === "service" && behavior !== "deny"
       ? "A local service can only decline this request. Approve or answer it in OpenMausBot while signed in."
@@ -6600,7 +6600,7 @@ bus.subscribe((event: RuntimeEvent) => {
             permission, guestDriven, commandAllowlist: command ?? undefined, allowKey: toolAllowKey ?? undefined,
             held: approvalHeldReason(heldContext) ?? (permission && guestDriven && routineRun ? confinedWhy(event.threadId) : undefined),
             heldCode: approvalHeldNote(heldContext),
-          }),
+          }), ...(verdict?.source === "abel-hard-gate" ? { hardGate: event.hardGate ?? "a hard-gated action" } : {}),
         },
       });
       if (event.requestId) { askMessageByRequest.set(`${event.threadId}:${event.requestId}`, message.id); if (!permission && asker) askCards.askedAgain(event.threadId, event.requestId, asker.id); }

@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { Gift, Mail } from "lucide-react";
+import { ABEL_DEFAULTS } from "../../shared/abel-defaults";
 import { track } from "@/lib/analytics";
 import { openEmailDraft } from "@/lib/app-links";
 import { BOAT_OFFER, boatClaimMailto, boatOfferRuns } from "@/lib/boat-offer";
@@ -50,7 +51,7 @@ export function BoatOfferCard({ onDone }: { onDone: (action: BoatOfferAction) =>
 
 export function BoatOfferPanel() {
   const titleId = useId();
-  if (!boatOfferRuns(Date.now()) || brandStatus().source === "file") return null;
+  if (!ABEL_DEFAULTS.sponsorOffers || !boatOfferRuns(Date.now()) || brandStatus().source === "file") return null;
   // A plain row in the key's own card: title, its line, and Get Boat; no tinted box of its own.
   return <section data-boat-offer aria-labelledby={titleId} className="flex flex-col gap-2 pt-1">
     <div className="flex items-center gap-6">

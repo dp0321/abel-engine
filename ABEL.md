@@ -28,9 +28,11 @@ One module, `ABEL_DEFAULTS` (it lives in `packages/phone-protocol/src/abel-defau
 | Field | Value | Effect |
 | --- | --- | --- |
 | `productName` | `"Abel Engine"` | The name a person reads |
-| `approvalMode` | `"full"` | Every bot and thread starts at Full access. Upstream switched a shared company (hosted) workspace to Ask at startup; Abel does not (`server/index.ts`). |
+| `approvalMode` | `"full"` | Every bot and thread on a standalone server or the desktop starts at Full access. A shared company (hosted) workspace keeps upstream's Ask (`server/index.ts`). |
 | `outboundPolicy` | `"allow"` | "Sending on your behalf" is "Send without asking" for every bot with no rule of its own (`DEFAULT_OUTBOUND_POLICY`) |
 | `pairingRequired` | `true` | Off-machine access always needs a pairing code or an approved sign-in. `serve --no-pair` only skips printing a code. |
+| `loopbackTrust` | `"service"` | `openmausbot serve` sets `OMB_LOOPBACK_TRUST=service` unless you set it: a local request without a session (any bot's shell) reaches only the service routes. It cannot approve a card, change a level, pair a device or change settings. |
+| `clientTokenFile` | `"abel-client-token"` | `serve` keeps a working local token in this data-dir file (0600) for Abel's HQ; see below |
 | `bindHost` | `"127.0.0.1"` | The server listens on loopback only; `serve --lan` and `OMB_LAN=1` are refused. Reach it from elsewhere with `--tunnel`, `--tailscale`, `--domain` or `--public-url`, each behind pairing. |
 | `analytics` | `false` | No product analytics until the person turns them on in Settings → General (`src/lib/analytics.ts`) |
 | `sponsorOffers` | `false` | No Boat credit card, no ModelGo offer, no upstream announcements feed (which carries sponsor cards). Your own Composio, your own keys and local CLIs are untouched. |
@@ -68,11 +70,41 @@ Reads (get, list, fetch, search…) never gate.
 3. **Permission requests from any engine.** `autoVerdict` returns no automatic answer for a request that meets a gate
    (`source: "abel-hard-gate"`), whatever the level or saved grant, and "Always allow this session" is not offered.
 
+Only the owner may allow a hard-gate card. That means the desktop app's own page (its per-launch token), a verified
+phone companion, or a paired owner (admin) device. A session-less local request, the local token and a chat-only
+session can decline one but never allow it (`mayApproveHardGate` in `server/request-auth.ts`; the card carries
+`hardGate`).
+
 Known limits: it matches names, arguments and command text. Code that computes an endpoint at run time (a script the bot
 wrote and then ran) is not seen; an engine that never asks (Codex with approvals off, an ACP agent in its own yolo mode)
 is gated only through connected apps.
 
 Tests: `server/abel-hard-gate.test.ts`.
+
+## The local token for Abel's HQ
+
+Under service trust, a tool on this Mac signs in with a token. Every `serve` start checks
+`<data dir>/abel-client-token` (default data dir `~/.openmausbot`, or `--data-dir` / `OMB_DATA_DIR`). If the token there
+no longer signs in, `serve` mints a new 90-day token into that file (mode 0600) and prints the path.
+
+- The token covers the HQ routes: bots, instances, tasks, messages, jobs, Stop and ordinary card answers. Bot
+  instructions (soul) and folder (cwd) are included.
+- It is refused anything that mints another credential: pairing, sessions, email sign-in and phone pairing. It also
+  cannot write `/api/config` (the sign-in list included) or allow a hard-gate card.
+
+How a client sends it (abel-lite `engine.py`): read the file, strip whitespace, and send `Authorization: Bearer <token>`
+on every request to `http://127.0.0.1:8799`. Keep `OPENMAUSBOT_TOKEN` as an override. On a 401, read the file again: a
+restarted `serve` may have replaced the token.
+
+A hard-gate card answered `allow` with this token gets 403 and the message "only the owner can approve it, in the
+desktop app or on a paired owner device". Approve those on the phone or in the desktop app.
+
+To pair a phone or browser as owner, run `serve` in a terminal without `--no-pair`; it prints a pairing code. Or pair
+from the desktop app, or an already-paired owner device. `openmausbot pair` from another terminal is refused under
+service trust, by design.
+
+Known open risk: a bot's shell runs as the same OS user, so it can read the data dir, this file included. These rules
+stop a bot from approving its own hard gate through the API. They are not an OS sandbox.
 
 ## Run it headless
 
@@ -82,7 +114,7 @@ pnpm build:server
 node dist-server/openmausbot.js serve --no-pair --no-open --port 8799 --data-dir ~/.abel-engine
 curl -s http://127.0.0.1:8799/api/health
 curl -s http://127.0.0.1:8799/api/edition      # {"edition":"oss","features":[]}
-node dist-server/openmausbot.js doctor --port 8799
+node dist-server/openmausbot.js doctor --port 8799 --token-file ~/.abel-engine/abel-client-token
 ```
 
 No Electron is needed. Stop it by the PID you started, never by name.

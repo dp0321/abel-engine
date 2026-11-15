@@ -12,7 +12,7 @@
 //   openmausbot run | send | wait | doctor | team apply | export | …
 //
 // This module only exports: openmausbot.ts runs main(), so bundling this file into other entries never runs it twice.
-import { ABEL_DEFAULTS } from "../shared/abel-defaults.ts"; import { spawn, type ChildProcess } from "node:child_process";
+import { ABEL_DEFAULTS } from "../shared/abel-defaults.ts"; import { ensureAbelClientToken } from "./abel-client-token.ts"; import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -711,7 +711,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     OMB_DATA_DIR: options.dataDir,
-    OMB_PORT: String(options.port),
+    OMB_PORT: String(options.port), OMB_LOOPBACK_TRUST: process.env.OMB_LOOPBACK_TRUST ?? ABEL_DEFAULTS.loopbackTrust,
     OMB_WEBHOOK_PORT: process.env.OMB_WEBHOOK_PORT || String(options.port + 1), ...(options.relay ? { OMB_PHONE_RELAY: "1" } : {}),
   };
   if (options.local) delete env.OMB_PUBLIC_URL;
@@ -849,7 +849,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
       void plan.account?.service.restore().catch(() => undefined);
     }
     const prefix = cliPrefix();
-    const described = await api(options.port, "/.well-known/openmausbot/environment").catch(() => null);
+    const described = await api(options.port, "/.well-known/openmausbot/environment").catch(() => null); if (serviceTrust && serveOwnerToken) await ensureAbelClientToken({ port: options.port, dataDir: options.dataDir, ownerToken: serveOwnerToken }).then((path) => log(`local client token (for Abel's HQ; no pairing, sign-in or hard-gate approvals): ${path}`), (error: unknown) => log(`no local client token: ${message(error)}`));
     const route: Route | null = plan ? "tunnel" : options.domain ? "domain" : tailscaleShare ? "tailscale" : publicUrl ? "public-url" : env.OMB_LAN === "1" ? "lan" : null;
     const origin = route === "lan" ? lanUrl(options.port, env) : publicUrl ?? null;
     log("");

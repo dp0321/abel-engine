@@ -35,9 +35,11 @@ const SHELL_TOOLS = new Set([
   "run_command", "shell_command",
 ]);
 
-const RECIPIENT_KEY = /^(to|cc|bcc|recipients?|recipient_?(list|ids|emails)|emails?|email_?addresses|to_?(emails?|addresses|numbers)|phone_?numbers?|numbers|contacts|members|invitees|attendees|user_?ids|users|channels|audience)$/i;
+const RECIPIENT_KEY = /^(to|cc|bcc|recipients?|\w*_recipients?|recipient_\w+|\w*_?emails?|email_?addresses|\w*_addresses|(to|cc|bcc)_\w+|contacts|phone_?numbers?|\w*_phones?|numbers|members|invitees|attendees|guests|participants|user_?ids|users|channels|audience)$/i;
+const NOT_RECIPIENT = /^(from|sender|reply_?to)(_\w+)?$/i;
+const ADDRESS = /^\s*(?:[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+|\+?[\d ()-]{7,})\s*$/;
 const CREDENTIAL_KEY = /^(pass(word|wd|phrase|code)?|pwd|pin|otp|totp|mfa_?code|two_?factor_?code|2fa_?code|verification_?code|one_?time_?code|secret|client_?secret|api_?key|access_?token|refresh_?token|auth_?token|bearer_?token|private_?key|credentials?)$/i;
-const FIELD_KEY = /^(selector|element|field|ref|target|label|name|placeholder|input_?type|locator)$/i;
+const FIELD_KEY = /^(selector|element|field|ref|target|label|name|placeholder|input_?type|locator|action_?summary|description|summary)$/i;
 const SECRET_FIELD = /pass(word|wd|code|phrase)|credential|one[- ]time code|\botp\b|2fa|security code/i;
 const TYPING = new Set(["TYPE", "FILL", "INPUT", "ENTER", "SET", "KEYBOARD"]);
 
@@ -83,8 +85,12 @@ export function recipientCount(input: unknown, depth = 0): number {
   if (!isRecord(input)) return 0;
   let count = 0;
   for (const [key, value] of Object.entries(input)) {
-    if (!RECIPIENT_KEY.test(key)) count += recipientCount(value, depth + 1);
-    else if (Array.isArray(value)) count += value.length;
+    if (NOT_RECIPIENT.test(key)) continue;
+    if (!RECIPIENT_KEY.test(key)) {
+      // Any list of addresses or phone numbers is a recipient list, whatever its field is called.
+      const addresses = Array.isArray(value) ? value.filter((item) => typeof item === "string" && ADDRESS.test(item)).length : 0;
+      count += addresses || recipientCount(value, depth + 1);
+    } else if (Array.isArray(value)) count += value.length;
     else if (typeof value === "string") count += value.split(/[,;\n]/).filter((part) => part.trim()).length;
   }
   return count;
@@ -101,8 +107,8 @@ function typesACredential(action: string[], input: unknown): boolean {
   return found;
 }
 
-const HTTP_CALL = /\b(curl|wget|http|https?:\/\/|httpx|fetch\(|requests\.\w+\(|axios|Invoke-(RestMethod|WebRequest))/i;
-const WRITE_METHOD = /(-X\s*['"]?(POST|PUT|PATCH|DELETE)\b|--request[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|(^|\s)(-d|--data(-raw|-binary|-urlencode)?|--json|-F|--form)(\s|=)|\.(post|put|patch|delete)\(|method\s*[:=]\s*['"]?(POST|PUT|PATCH|DELETE)\b|\b(POST|PUT|PATCH|DELETE)\s+https?:)/i;
+const HTTP_CALL = /(\b(curl|wget|https?|xhs?|httpx|urllib|axios)\b|https?:\/\/|fetch\(|requests\.\w+\(|Invoke-(RestMethod|WebRequest))/i;
+const WRITE_METHOD = /(-X\s*['"]?(POST|PUT|PATCH|DELETE)\b|--request[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|(^|\s)(-d|--data(-raw|-binary|-urlencode)?|--json|-F|--form|--post-data|--post-file|--body-data|--body-file)(\s|=)|--method[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|\b(https?|xhs?)\s+(-{1,2}[\w-]+(=\S+)?\s+)*(POST|PUT|PATCH|DELETE)\s|\.(post|put|patch|delete)\(|method\s*[:=]\s*['"]?(POST|PUT|PATCH|DELETE)\b|\b(POST|PUT|PATCH|DELETE)\s+https?:|\burlopen\([^)]*\bdata\s*=|\bRequest\([^)]*\bdata\s*=|\burlopen\(\s*[\w.]+\s*,\s*[^)\s])/i;
 
 interface CommandRule { kind: HardGateKind; label: string; test: (command: string) => boolean }
 
@@ -129,7 +135,8 @@ const COMMAND_RULES: CommandRule[] = [
   {
     kind: "credential", label: "typing a password or credential",
     test: (c) => /\bsecurity\s+(add|set)-(generic|internet)-password\b/i.test(c) || /\bop\s+item\s+(create|edit)\b/i.test(c) ||
-      /\bsshpass\b|\bchpasswd\b|(^|[\s;&|])passwd\b|\bsudo\s+-S\b/i.test(c) || /--password[=\s]+\S/i.test(c),
+      /\bsshpass\b|\bchpasswd\b|(^|[\s;&|])passwd\b|\bsudo\s+-S\b/i.test(c) || /--password[=\s]+\S/i.test(c) ||
+      /\b(mysql|mysqldump|mysqladmin|mariadb)\b[^|;&]*\s-p\S+/.test(c),
   },
 ];
 

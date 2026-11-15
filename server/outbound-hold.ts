@@ -69,7 +69,7 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
             tool: outboundTool,
             held: HELD_NOTE["approval.held.outbound"],
             heldCode: "approval.held.outbound",
-            outboundRequest: { tool: outboundTool, app, calls },
+            outboundRequest: { tool: outboundTool, app, calls }, ...(hardGate ? { hardGate: hardGate.label } : {}),
           },
         });
         appendDecision(DATA_DIR, {

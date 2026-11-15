@@ -13,6 +13,7 @@ import { DEFAULT_OUTBOUND_POLICY } from "../shared/outbound.ts";
 import { autoVerdict } from "./auto-approve.ts";
 import { abelGateHookSettings } from "./drivers/claude-hook-command.ts";
 import { lanUrl, listenHost } from "./lan-address.ts";
+import { ABEL_LOCAL_CLIENT_LABEL, abelLocalClientRefused, mayApproveHardGate, type RequestAuth } from "./request-auth.ts";
 import { createOutboundHold, type OutboundHoldDeps } from "./outbound-hold.ts";
 import { OutboundRequestService } from "./outbound-requests.ts";
 
@@ -26,7 +27,7 @@ describe("Abel defaults", () => {
   it("start every bot at Full access, send without asking, loopback only, analytics and sponsors off", () => {
     expect(DEFAULT_APPROVAL_MODE).toBe("full");
     expect(DEFAULT_OUTBOUND_POLICY).toEqual({ policy: "allow" });
-    expect(ABEL_DEFAULTS).toMatchObject({ productName: "Abel Engine", bindHost: "127.0.0.1", pairingRequired: true, analytics: false, sponsorOffers: false, hardGates: true, massSendRecipients: 25 });
+    expect(ABEL_DEFAULTS).toMatchObject({ loopbackTrust: "service", clientTokenFile: "abel-client-token", productName: "Abel Engine", bindHost: "127.0.0.1", pairingRequired: true, analytics: false, sponsorOffers: false, hardGates: true, massSendRecipients: 25 });
   });
 
   it("listens on 127.0.0.1 and offers no LAN link even with OMB_LAN=1", () => {
@@ -68,11 +69,22 @@ describe("abelHardGate on connected-app and MCP tools", () => {
     expect(recipientCount({ message: { to: emails(3), cc: "a@x.com; b@x.com" } })).toBe(5);
   });
 
+  it("counts Composio's own recipient fields: Gmail and Outlook to 30 people are mass sends", () => {
+    expect(gated("GMAIL_SEND_EMAIL", { recipient_email: "a@x.com", extra_recipients: emails(29), cc: [], bcc: [] })).toBe("mass-send");
+    expect(gated("OUTLOOK_SEND_EMAIL", { to_email: "a@x.com", cc_emails: emails(15), bcc_emails: emails(14) })).toBe("mass-send");
+    expect(gated("OUTLOOK_SEND_EMAIL", { to_email: "a@x.com", cc_emails: emails(10) })).toBeNull();
+    expect(gated("TWILIO_SEND_SMS", { phone_numbers: Array.from({ length: 30 }, (_, i) => `+1555000${String(i).padStart(4, "0")}`) })).toBe("mass-send");
+    expect(gated("SLACK_SEND_MESSAGE", { targets: emails(30) })).toBe("mass-send");
+    expect(recipientCount({ from_email: "me@x.com", reply_to: "me@x.com", to: "a@x.com" })).toBe(1);
+  });
+
   it("typing a password or credential asks", () => {
     expect(gated("mcp__browser__fill", { selector: "input[type=password]", value: "hunter2" })).toBe("credential");
     expect(gated("mcp__playwright__browser_type", { element: "Password field", text: "hunter2" })).toBe("credential");
     expect(gated("GITHUB_CREATE_REPO_SECRET", { secret: "s3cr3t" })).toBe("credential");
     expect(gated("mcp__browser__fill", { selector: "#search", value: "shoes" })).toBeNull();
+    expect(gated("mcp__claude-in-chrome__form_input", { ref: "ref_12", value: "hunter2", action_summary: "Enters the account password" })).toBe("credential");
+    expect(gated("mcp__claude-in-chrome__form_input", { ref: "ref_3", value: "Austin", action_summary: "Sets the city to Austin" })).toBeNull();
   });
 
   it("a raw API call to a finance app asks; to another app it does not", () => {
@@ -103,6 +115,12 @@ describe("commandHardGate on shell commands", () => {
     ["stripe payouts create --amount 100", "money"],
     ["security add-generic-password -a me -s svc -w hunter2", "credential"],
     ["mysql --password=hunter2 -e 'select 1'", "credential"],
+    ["mysql -uroot -pS3cret -e 'select 1'", "credential"],
+    ["wget --post-data 'qty=1' http://127.0.0.1:8080/api/orders", "trade"],
+    ["http POST 127.0.0.1:8080/api/orders qty:=1", "trade"],
+    ["xh POST :8080/api/orders qty=1", "trade"],
+    ["python3 -c \"import urllib.request as u; u.urlopen('http://127.0.0.1:8080/api/orders', data=b'qty=1')\"", "trade"],
+    ["python3 -c \"import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8080/api/orders', data=b'{}'))\"", "trade"],
   ])("%s asks (%s)", (command, kind) => {
     expect(commandHardGate(command)?.kind).toBe(kind);
     expect(abelHardGate({ tool: "Bash", input: { command } })?.kind).toBe(kind);
@@ -111,6 +129,9 @@ describe("commandHardGate on shell commands", () => {
   it.each([
     "git commit -m 'flatten the config tree'",
     "curl -s http://127.0.0.1:8080/api/orders",
+    "http GET 127.0.0.1:8080/api/orders",
+    "python3 -c \"import urllib.request as u; print(u.urlopen('http://127.0.0.1:8080/api/orders').read())\"",
+    "mysql -u root -p -e 'select 1'",
     "curl -X POST https://api-fxpractice.oanda.com/v3/accounts/1/orders -d @order.json",
     "curl -X POST https://paper-api.alpaca.markets/v2/orders -d @o.json",
     "ls -la && cat /etc/passwd",
@@ -180,6 +201,28 @@ describe("approvals honour the hard gate at Full access", () => {
     const { hardGate: _gate, ...input } = held.input;
     await expect(held.hold.hold({ ...input, active: () => true })).resolves.toEqual({ ok: true, approved: false });
     expect(held.appended).toEqual([]);
+  });
+});
+
+describe("who may allow a hard-gate card", () => {
+  const session = (scopes: Array<"admin" | "client">, label = "Dion's phone") => ({ kind: "session", via: "bearer", scopes, session: { label } }) as unknown as RequestAuth;
+  it("the desktop app's page, a verified phone companion, or a paired owner; never an unsigned local caller or a client token", () => {
+    expect(mayApproveHardGate({ kind: "loopback", scopes: ["admin", "client"] })).toBe(false);
+    expect(mayApproveHardGate({ kind: "loopback", scopes: ["client"], trust: "service" })).toBe(false);
+    expect(mayApproveHardGate({ kind: "loopback", scopes: ["admin", "client"], desktopOwner: true })).toBe(true);
+    expect(mayApproveHardGate({ kind: "loopback", scopes: ["admin", "client"], companionDevice: "phone-1" })).toBe(true);
+    expect(mayApproveHardGate(session(["admin", "client"]))).toBe(true);
+    expect(mayApproveHardGate(session(["client"]))).toBe(false);
+    expect(mayApproveHardGate(session(["admin", "client"], ABEL_LOCAL_CLIENT_LABEL))).toBe(false);
+  });
+
+  it("the local token mints no credential and rewrites no sign-in settings", () => {
+    for (const [method, path] of [["POST", "/api/auth/pairing"], ["GET", "/api/auth/sessions"], ["DELETE", "/api/auth/sessions/s1"], ["POST", "/api/auth/email/start"], ["POST", "/api/team/phone-pairing"], ["PATCH", "/api/config"], ["PUT", "/api/config"]]) {
+      expect(abelLocalClientRefused(method!, path!), `${method} ${path}`).toBe(true);
+    }
+    for (const [method, path] of [["GET", "/api/auth/session"], ["GET", "/api/config"], ["POST", "/api/bots"], ["PATCH", "/api/bots/b1"], ["POST", "/api/threads/t1/respond"], ["GET", "/api/instances"]]) {
+      expect(abelLocalClientRefused(method!, path!), `${method} ${path}`).toBe(false);
+    }
   });
 });
 

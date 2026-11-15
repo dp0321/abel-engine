@@ -2,12 +2,19 @@
 export const ABEL_DEFAULTS = {
   /** The name a person reads in titles, onboarding and settings. */
   productName: "Abel Engine",
-  /** The level every bot and thread starts at, a shared company workspace's included. */
+  /** The level every bot and thread starts at on a standalone server or the desktop. A shared company (hosted) workspace
+   * keeps upstream's Ask. */
   approvalMode: "full",
   /** "Sending on your behalf" for a bot with no rule of its own. */
   outboundPolicy: "allow",
   /** Off-machine access always needs a pairing code or an approved sign-in; `serve --no-pair` only skips printing one. */
   pairingRequired: true,
+  /** How `openmausbot serve` treats a local caller without a session (OMB_LOOPBACK_TRUST unless set): "service" lets a
+   * bot's own shell reach only the service routes, never approvals, levels or pairing. */
+  loopbackTrust: "service",
+  /** In the data dir: the access token `serve` writes (0600) for local tools such as Abel's HQ. It cannot pair, sign in,
+   * change the sign-in list or approve a hard gate. */
+  clientTokenFile: "abel-client-token",
   /** The only address the server listens on; `--lan` / OMB_LAN=1 is refused. */
   bindHost: "127.0.0.1",
   /** Product analytics (docs/analytics.md) until the person turns them on. */

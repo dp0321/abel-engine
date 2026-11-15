@@ -167,7 +167,7 @@ describe("openmausbot command line", () => {
     const port = workerPort(21000, 9000);
     const child = spawn(process.execPath, ["--experimental-strip-types", join(SERVER_DIR, "openmausbot.ts"), "serve", "--port", String(port), "--data-dir", join(home, "data"), "--label", "cli test", "--public-url", "https://mini.example"], {
       cwd: join(SERVER_DIR, ".."),
-      env: { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, OMB_WEBHOOK_PORT: String(port + 1), OMB_BROWSER_CONNECTION: join(home, "browser-connection.json") },
+      env: { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, OMB_WEBHOOK_PORT: String(port + 1), OMB_LOOPBACK_TRUST: "owner", OMB_BROWSER_CONNECTION: join(home, "browser-connection.json") },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let out = "";
@@ -542,7 +542,7 @@ describe.skipIf(process.platform === "win32")("serve --tunnel", () => {
     const child = cli(["serve", "--tunnel", "--port", String(port), "--data-dir", dataDir, "--label", "tunnel test"], {
       HOME: home,
       USERPROFILE: home,
-      OMB_WEBHOOK_PORT: String(port + 1),
+      OMB_WEBHOOK_PORT: String(port + 1), OMB_LOOPBACK_TRUST: "owner", // upstream's owner-trust serve
       OMB_BROWSER_CONNECTION: join(home, "browser-connection.json"),
       OMB_CONTROL_PLANE_URL: stub.url,
       OMB_CLOUDFLARED_PATH: fake,
@@ -655,7 +655,7 @@ describe.skipIf(process.platform === "win32")("serve --domain", () => {
     const port = workerPort(21000, 9000);
     const child = spawn(process.execPath, ["--experimental-strip-types", join(SERVER_DIR, "openmausbot.ts"), "serve", "--domain", "omb.example.test", "--port", String(port), "--data-dir", dataDir], {
       cwd: join(SERVER_DIR, ".."),
-      env: { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, OMB_WEBHOOK_PORT: String(port + 1), OMB_BROWSER_CONNECTION: join(home, "browser-connection.json"), OMB_CADDY_PATH: fake },
+      env: { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, OMB_WEBHOOK_PORT: String(port + 1), OMB_LOOPBACK_TRUST: "owner", OMB_BROWSER_CONNECTION: join(home, "browser-connection.json"), OMB_CADDY_PATH: fake },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let out = "";
