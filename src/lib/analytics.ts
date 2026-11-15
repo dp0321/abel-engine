@@ -3,6 +3,7 @@
 import type { CaptureResult, PostHog } from "posthog-js";
 import { appVersion } from "@/lib/app-links";
 import { readAdvancedMode } from "@/lib/interface-mode";
+import { ABEL_DEFAULTS } from "../../shared/abel-defaults";
 
 const TOKEN = "phc_m2hP39w8y2gLPvHgDvSXAu6xcZ3agjf4ruL56rGcMZEe";
 
@@ -23,9 +24,10 @@ export function analyticsEnabled(): boolean {
   const desktop = desktopSwitch()?.enabled();
   if (typeof desktop === "boolean") return desktop;
   try {
-    return localStorage.getItem(OPT_OUT_KEY) !== "1";
+    const stored = localStorage.getItem(OPT_OUT_KEY);
+    return stored === null ? ABEL_DEFAULTS.analytics : stored !== "1";
   } catch {
-    return true;
+    return ABEL_DEFAULTS.analytics;
   }
 }
 

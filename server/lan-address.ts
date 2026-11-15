@@ -2,6 +2,7 @@ import type { Server } from "node:http";
 import type { Socket } from "node:net";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 
+import { ABEL_DEFAULTS } from "../shared/abel-defaults.ts";
 import { isPrivateHost } from "../shared/private-host.ts";
 
 /** Bridges, VMs and VPN tunnels: their addresses reach this machine's containers or a VPN, not the person's devices. */
@@ -48,10 +49,15 @@ export function privateConnection(localAddress: string | undefined, remoteAddres
   return isPrivateHost(plain(localAddress)) && isPrivateHost(plain(remoteAddress));
 }
 
+/** Abel listens on loopback only: OMB_LAN=1 is ignored while ABEL_DEFAULTS.bindHost is 127.0.0.1. */
+export function lanListening(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OMB_LAN === "1" && ABEL_DEFAULTS.bindHost !== "127.0.0.1";
+}
+
 /** Where the server listens: loopback, or with OMB_LAN=1 every IPv4 address with each connection held to private ends,
  * so a new Wi-Fi network or DHCP lease needs no restart. */
 export function listenHost(server: Server, env: NodeJS.ProcessEnv = process.env): string {
-  if (env.OMB_LAN !== "1") return "127.0.0.1";
+  if (!lanListening(env)) return ABEL_DEFAULTS.bindHost;
   server.on("connection", (socket: Socket) => {
     if (!privateConnection(socket.localAddress, socket.remoteAddress)) socket.destroy();
   });
@@ -60,7 +66,7 @@ export function listenHost(server: Server, env: NodeJS.ProcessEnv = process.env)
 
 /** With OMB_LAN=1, the address other devices on this network use, read afresh for each link; else null. */
 export function lanUrl(port: number, env: NodeJS.ProcessEnv = process.env, addresses: () => ReachableAddresses = reachableAddresses): string | null {
-  if (env.OMB_LAN !== "1") return null;
+  if (!lanListening(env)) return null;
   const address = addresses().lan[0];
   return address ? `http://${address}:${port}` : null;
 }

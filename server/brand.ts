@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
+import { ABEL_DEFAULTS } from "../shared/abel-defaults.ts";
 import { DATA_DIR } from "./config.ts";
 import { entitled } from "./enterprise.ts";
 
@@ -40,7 +41,7 @@ export type Brand = z.infer<typeof brandSchema>;
 
 export const DEFAULT_BRAND: Brand = { name: "OpenMausBot" };
 /** The product's name wherever a person reads it. OpenMausBot names only the open-source project and its repository. */
-export const PRODUCT_NAME = "MausBot";
+export const PRODUCT_NAME: string = ABEL_DEFAULTS.productName;
 
 export interface BrandStatus {
   brand: Brand;

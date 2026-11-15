@@ -1,4 +1,5 @@
 // `--json` prints a tool's result unchanged; plain output is a line per item.
+import { ABEL_DEFAULTS } from "../../shared/abel-defaults.ts";
 import { EXIT, flag, parseCount, parseDuration, requiredFlag, usageError } from "./args.ts";
 import { conversationFor, conversationTitle, newSendId, readMessage, resolveTarget, type Target, type VerbContext, type VerbOutcome } from "./context.ts";
 import { oneLine, shortId } from "./output.ts";
@@ -60,7 +61,7 @@ async function doctorOnce(ctx: VerbContext): Promise<VerbOutcome> {
     },
     exitCode: ok ? EXIT.done : isOmb && !tooOld ? EXIT.failed : EXIT.unreachable,
     human: [
-      `${server ? `OpenMausBot ${server.version} ("${server.label}")` : "OpenMausBot"} at ${client.baseUrl}: ${ok ? "ready" : "not ready"}`,
+      `${server ? `${ABEL_DEFAULTS.productName} ${server.version} ("${server.label}")` : ABEL_DEFAULTS.productName} at ${client.baseUrl}: ${ok ? "ready" : "not ready"}`,
       `You are: ${who}`,
       `Engines available: ${availableEngines.length ? availableEngines.join(", ") : availableCount ? `${availableCount} (which ones needs a session)` : "none"}`,
       ...(browser ? [`Bots' browser: ${browser.kind === "engine" ? `installed${browser.version ? ` (${browser.version})` : ""}` : "not available"}`] : []),

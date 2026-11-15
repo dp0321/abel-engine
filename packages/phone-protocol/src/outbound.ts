@@ -3,6 +3,7 @@
 // without asking; at Full access they run unless the bot has a rule of its own.
 // A read-and-draft routine run never reaches them: the relay refuses every send
 // there. Shared by the harness (which enforces it) and the app.
+import { ABEL_DEFAULTS } from "./abel-defaults.ts";
 import { isConnectedAppsServer } from "./own-apps.ts";
 
 export type OutboundPolicy = {
@@ -110,8 +111,8 @@ export function normalizeOutboundPolicy(value: unknown): OutboundPolicy | null {
   return policy === "ask" || policy === "allow" ? { policy } : null;
 }
 
-/** What a bot without a stored policy does: ask, every time. */
-export const DEFAULT_OUTBOUND_POLICY: OutboundPolicy = { policy: "ask" };
+/** What a bot without a stored policy does: Abel sends without asking (upstream asks every time). */
+export const DEFAULT_OUTBOUND_POLICY: OutboundPolicy = { policy: ABEL_DEFAULTS.outboundPolicy };
 
 /** Drops from a stored bot's rule what `normalizeOutboundPolicy` drops, so every copy of one rule reads the same; true
  * when it changed. A rule that is not one is left as it is, and asks. */

@@ -38,7 +38,8 @@ const api = async (method: string, path: string, body?: unknown, token = admin) 
 const bot = async (name: string) => {
   const created = await api("POST", "/api/bots", { name });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
-  expect((await api("PATCH", `/api/bots/${created.body.bot.id}`, { approvalMode: "ask" })).status).toBe(200);
+  // Abel's default is Send without asking; these bots keep upstream's ask-every-time rule.
+  expect((await api("PATCH", `/api/bots/${created.body.bot.id}`, { approvalMode: "ask", outbound: { policy: "ask" } })).status).toBe(200);
   return created.body.bot;
 };
 const mint = async (botId: string, threadId: string, kind = "connectors") => {

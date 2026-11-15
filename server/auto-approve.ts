@@ -81,6 +81,7 @@ export type AutoVerdictSource =
   | "native-approval"
   | "explicit-approval-block"
   | "outbound-guard"
+  | "abel-hard-gate"
   | "safety-floor"
   | "no-grant";
 
@@ -94,6 +95,8 @@ export function autoVerdict(
   mode: ApprovalMode,
   tool: string,
   context?: {
+    /** The Abel hard gate the call meets: a person answers it at every level. */
+    hardGate?: string;
     /** The provider asks to widen its sandbox rather than perform one action; only explicit Full may answer. */
     requiresExplicitApproval?: boolean;
     /** Exact bot/provider/folder/command match against the person's saved rules. */
@@ -107,6 +110,7 @@ export function autoVerdict(
   if (ASKS_A_PERSON.has(bareToolName(tool))) {
     return { approve: null, source: "no-grant" };
   }
+  if (context?.hardGate) return { approve: null, source: "abel-hard-gate" };
   // Full's promise is literal, sandbox widening included; entering Full is consent-gated by the bot PATCH endpoint.
   if (mode === "full") return { approve: `approved ${tool} (full access)`, source: "full-access" };
   if (context?.requiresExplicitApproval) return { approve: null, source: "explicit-approval-block" };

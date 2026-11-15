@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { accentInk, applyBrand, bootstrapBrand, brand, brandVars, DEFAULT_BRAND, iconType, luminance, PRODUCT_NAME, productName } from "./brand";
+import { accentInk, applyBrand, bootstrapBrand, brand, brandVars, DEFAULT_BRAND, iconType, luminance, productName } from "./brand";
 
 describe("brand", () => {
   it("derives readable ink for light and dark accents", () => {
@@ -67,7 +67,8 @@ describe("the tab icon", () => {
 });
 
 // The title shows before /api/brand answers, and stays if that request fails.
-it.each(["index.html", "rail.html"])("%s starts with the product's name as its title", (page) => {
+it.each(["index.html", "rail.html"])("%s starts with the product's name as its title", async (page) => {
   const html = readFileSync(new URL(`../../${page}`, import.meta.url), "utf8");
-  expect(html).toContain(`<title>${PRODUCT_NAME}</title>`);
+  const { ABEL_DEFAULTS } = await vi.importActual<typeof import("../../shared/abel-defaults")>("../../shared/abel-defaults");
+  expect(html).toContain(`<title>${ABEL_DEFAULTS.productName}</title>`);
 });

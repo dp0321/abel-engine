@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { applyStartupPreferences, parseArgs, runAccess, runLogin, runOnboardingCommand, serverEntry, type CliOptions, verifyPhoneEndpoint } from "./cli.ts";
 import { browserSignInLines, formatSessions, pairingBlock, qrToString, untilText } from "./cli-pairing.ts";
-import { reachableAddresses } from "./lan-address.ts";
 import { readAdminActivityRange } from "./admin-activity.ts";
 import { SetupCancelled } from "./cli-prompts.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
@@ -207,8 +206,7 @@ describe("openmausbot command line", () => {
 });
 
 describe("serve --lan", () => {
-  it("answers on this network's address, never as the owner to another machine, and links to that address", async () => {
-    const lan = reachableAddresses().lan[0];
+  it("is refused: Abel Engine listens on 127.0.0.1 only", async () => {
     const home = mkdtempSync(join(tmpdir(), "omb-cli-lan-"));
     const port = workerPort(21000, 9000);
     const child = spawn(process.execPath, ["--experimental-strip-types", join(SERVER_DIR, "openmausbot.ts"), "serve", "--lan", "--port", String(port), "--data-dir", join(home, "data")], {
@@ -222,15 +220,8 @@ describe("serve --lan", () => {
     try {
       const deadline = Date.now() + 60_000;
       while (!/Get a pairing code:|Pick a way in/.test(out) && Date.now() < deadline && child.exitCode === null) await new Promise((r) => setTimeout(r, 200));
-      if (!lan) {
-        expect(out).toContain("--lan: this machine has no private network address");
-        return;
-      }
-      expect(out).toContain(`Reach    http://${lan}:${port}   this network only, not encrypted`);
-      const spoofed = await fetch(`http://${lan}:${port}/api/bots`, { headers: { host: `127.0.0.1:${port}` } });
-      expect(spoofed.status, "a LAN peer that writes a loopback Host is still a stranger").toBe(403);
-      const pairing: any = await (await fetch(`http://127.0.0.1:${port}/api/auth/pairing`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
-      expect(pairing.url).toBe(`http://${lan}:${port}/pair#code=${pairing.code}`);
+      expect(out).toContain("listens on 127.0.0.1 only, so --lan is off");
+      expect(out).toContain(`Listening on 127.0.0.1:${port}, reachable from this machine only.`);
     } finally {
       child.kill("SIGTERM");
       await waitForExit(child, { signal: "SIGTERM" });

@@ -123,11 +123,11 @@ describe("PermissionsSection parts", () => {
 describe("Sending on your behalf", () => {
   const option = (label: string) => [...host.querySelectorAll("button")].find((candidate) => candidate.textContent === label);
 
-  it("asks every time by default, and one click sends without asking", () => {
+  it("sends without asking by default (Abel), and one click asks every time", () => {
     render(base);
-    expect(option("Ask every time")?.getAttribute("aria-pressed")).toBe("true");
-    flushSync(() => option("Send without asking")!.click());
-    expect(dispatch).toHaveBeenCalledExactlyOnceWith({ type: "updateBot", botId: "pepper", patch: { outbound: { policy: "allow" } } });
+    expect(option("Send without asking")?.getAttribute("aria-pressed")).toBe("true");
+    flushSync(() => option("Ask every time")!.click());
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith({ type: "updateBot", botId: "pepper", patch: { outbound: { policy: "ask" } } });
   });
 
   it("has no limit to set or count, even for a rule saved with a daily cap", () => {

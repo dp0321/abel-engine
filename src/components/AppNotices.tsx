@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Rocket, Star } from "lucide-react";
 import type { CloudAccountState } from "../../electron/cloud-account.mjs";
 import type { CloudOffer } from "../../electron/cloud-home.mjs";
+import { ABEL_DEFAULTS } from "../../shared/abel-defaults";
 import { api, useStore } from "@/state/store";
 import { APP_REPOSITORY, appVersion } from "@/lib/app-links";
 import { track } from "@/lib/analytics";
@@ -165,7 +166,7 @@ export function AppNotices({ quiet = false, viewer = null, now = Date.now }: { q
   const simpleDue = SIMPLE_ONLY ? newLookDue : advancedBack || !promptSeen;
   const simpleBlocked = useOtherDialogOpen(simpleDue) || Boolean(state.liveCall && state.liveCall.status !== "ended");
   // A sponsor's card is for whoever chooses a team's providers: its Owner and Admins, never its members.
-  const sponsorsHere = SPONSOR_CARDS_FOR_TEAM_MEMBERS || !state.config?.team || viewer?.canSave === true;
+  const sponsorsHere = ABEL_DEFAULTS.sponsorOffers && (SPONSOR_CARDS_FOR_TEAM_MEMBERS || !state.config?.team || viewer?.canSave === true);
   const boatHere = sponsorsHere && boatOfferRuns(now()) && brandStatus().source !== "file";
   const modelgoHere = sponsorsHere && modelgoOfferable(state.config?.managedPolicy);
 

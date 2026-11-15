@@ -1,3 +1,4 @@
+import type { HardGate } from "../shared/abel-hard-gate.ts";
 import type { ConnectorCall, OutboundPolicy } from "../shared/outbound.ts";
 import { DEFAULT_OUTBOUND_POLICY } from "../shared/outbound.ts";
 import type { Notification } from "../shared/notification.ts";
@@ -30,7 +31,8 @@ export type OutboundHoldAnswer = { ok: true; approved: boolean } | { ok: false; 
 
 /** The rule a send goes out under without the card, or null when it waits on the card. At Full access a bot with no
  * sending rule of its own sends without asking; a stored rule is kept exactly as set. */
-function sendsWithoutAsking(rule: OutboundPolicy | undefined, fullAccess: boolean, opaque: boolean): "full-access" | "allow" | null {
+function sendsWithoutAsking(rule: OutboundPolicy | undefined, fullAccess: boolean, opaque: boolean, hardGate?: HardGate): "full-access" | "allow" | null {
+  if (hardGate) return null;
   if (fullAccess && rule === undefined) return "full-access";
   // A call it cannot inspect (code run) goes out under "allow" only at Full access, as it would with no rule.
   return (rule ?? DEFAULT_OUTBOUND_POLICY).policy === "allow" && (!opaque || fullAccess) ? "allow" : null;
@@ -38,9 +40,9 @@ function sendsWithoutAsking(rule: OutboundPolicy | undefined, fullAccess: boolea
 
 export interface OutboundHold {
   /** A send goes out without asking (Full access with no rule of its own, or "allow") or waits on the "Send on your behalf?" card. `fullAccess`: the turn runs at Full access. */
-  hold(input: { bot: OutboundHoldBot; threadId: string; tool: string; calls: ConnectorCall[]; opaque: boolean; fullAccess: boolean; active: () => boolean }): Promise<OutboundHoldAnswer>;
+  hold(input: { bot: OutboundHoldBot; threadId: string; tool: string; calls: ConnectorCall[]; opaque: boolean; fullAccess: boolean; active: () => boolean; hardGate?: HardGate }): Promise<OutboundHoldAnswer>;
   /** At dispatch time, against the bot as it is now: a send that needs no card is recorded; otherwise the hold must have been approved. Throws the refusal text. */
-  beforeDispatch(input: { bot: OutboundHoldBot; threadId: string; tool: string; opaque: boolean; fullAccess: boolean; approved: boolean }): void;
+  beforeDispatch(input: { bot: OutboundHoldBot; threadId: string; tool: string; opaque: boolean; fullAccess: boolean; approved: boolean; hardGate?: HardGate }): void;
 }
 
 export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
@@ -49,9 +51,9 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
   const { holdMs } = deps;
 
   return {
-    async hold({ bot: currentSender, threadId, tool: outboundTool, calls: outboundCalls, opaque, fullAccess, active }) {
+    async hold({ bot: currentSender, threadId, tool: outboundTool, calls: outboundCalls, opaque, fullAccess, active, hardGate }) {
       const refuseOutbound = (text: string): OutboundHoldAnswer => ({ ok: false, text });
-      if (!sendsWithoutAsking(currentSender.outbound, fullAccess, opaque)) {
+      if (!sendsWithoutAsking(currentSender.outbound, fullAccess, opaque, hardGate)) {
         const { app, calls, summary } = outboundCard(outboundCalls);
         const owner = connectorThread(currentSender.id, threadId);
         const held = outboundRequests.open({ botId: currentSender.id, threadId, tool: outboundTool, timeoutMs: holdMs });
@@ -60,7 +62,7 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
           kind: "options",
           ...(owner?.group ? { from: { botId: currentSender.id, name: currentSender.name, color: currentSender.color } } : {}),
           card: {
-            title: "Send on your behalf?",
+            title: hardGate ? `Approve ${hardGate.label}?` : "Send on your behalf?",
             subtitle: summary,
             options: ["Allow", "Deny"],
             requestId: held.requestId,
@@ -72,7 +74,7 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
         });
         appendDecision(DATA_DIR, {
           threadId, requestId: held.requestId, botId: currentSender.id, botName: currentSender.name,
-          tool: outboundTool, summary, decision: "card-shown", source: "outbound",
+          tool: outboundTool, summary, decision: "card-shown", source: "outbound", ...(hardGate ? { rule: `abel-hard-gate:${hardGate.kind}` } : {}),
         });
         if (owner?.group) {
           if (activeGroupTurnForBot(currentSender.id)?.threadId === threadId) store.setActivity(currentSender.id, "waiting-on-you");
@@ -107,8 +109,8 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
       }
       return { ok: true, approved: false };
     },
-    beforeDispatch({ bot: fresh, threadId, tool: outboundTool, opaque, fullAccess, approved }) {
-      const rule = sendsWithoutAsking(fresh.outbound, fullAccess, opaque);
+    beforeDispatch({ bot: fresh, threadId, tool: outboundTool, opaque, fullAccess, approved, hardGate }) {
+      const rule = sendsWithoutAsking(fresh.outbound, fullAccess, opaque, hardGate);
       if (rule) {
         appendDecision(DATA_DIR, { threadId, botId: fresh.id, botName: fresh.name, tool: outboundTool, decision: "auto-approved", source: "outbound", rule });
       } else if (!approved) {

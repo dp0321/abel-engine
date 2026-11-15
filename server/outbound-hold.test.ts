@@ -134,7 +134,7 @@ describe("createOutboundHold", () => {
   });
 
   it("deny answers the decline text; timeout marks the card unavailable", async () => {
-    const denied = setup(bot(undefined));
+    const denied = setup(bot({ policy: "ask" }));
     const pending = denied.hold.hold({ ...denied.input, active: () => true });
     const requestId = denied.appended[0].message.card!.requestId as string;
     denied.outboundRequests.resolve({ threadId: "t1", requestId, behavior: "deny" });
@@ -142,7 +142,7 @@ describe("createOutboundHold", () => {
     expect(denied.patches).toEqual([]);
 
     vi.useFakeTimers();
-    const timed = setup(bot(undefined));
+    const timed = setup(bot({ policy: "ask" }));
     const waiting = timed.hold.hold({ ...timed.input, active: () => true });
     await vi.advanceTimersByTimeAsync(1_000);
     await expect(waiting).resolves.toEqual({ ok: false, text: expect.stringMatching(/nobody answered/) });

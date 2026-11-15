@@ -12,7 +12,7 @@
 //   openmausbot run | send | wait | doctor | team apply | export | …
 //
 // This module only exports: openmausbot.ts runs main(), so bundling this file into other entries never runs it twice.
-import { spawn, type ChildProcess } from "node:child_process";
+import { ABEL_DEFAULTS } from "../shared/abel-defaults.ts"; import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -724,7 +724,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
   if (entry.skillsDir && !process.env.OMB_SKILLS_DIR) env.OMB_SKILLS_DIR = entry.skillsDir;
   if (options.label && !process.env.OMB_ENVIRONMENT_LABEL) env.OMB_ENVIRONMENT_LABEL = options.label;
   if (plan) Object.assign(env, { OMB_TUNNEL_SOCKET: plan.origin.socketPath, OMB_SERVES_TUNNEL: "1" });
-  const lanRefusal = options.lan ? lanProblem() : null;
+  const lanRefusal = !options.lan ? null : ABEL_DEFAULTS.bindHost === "127.0.0.1" ? `${ABEL_DEFAULTS.productName} listens on 127.0.0.1 only, so --lan is off; use --tunnel, --tailscale, --domain or --public-url (each needs pairing).` : lanProblem();
   if (lanRefusal) log(lanRefusal);
   if (options.lan && !lanRefusal) env.OMB_LAN = "1";
   else delete env.OMB_LAN;
@@ -853,7 +853,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
     const route: Route | null = plan ? "tunnel" : options.domain ? "domain" : tailscaleShare ? "tailscale" : publicUrl ? "public-url" : env.OMB_LAN === "1" ? "lan" : null;
     const origin = route === "lan" ? lanUrl(options.port, env) : publicUrl ?? null;
     log("");
-    log(`MausBot ${serverVersion()} · server "${described?.body?.label ?? options.label ?? "this machine"}"`);
+    log(`${ABEL_DEFAULTS.productName} ${serverVersion()} · server "${described?.body?.label ?? options.label ?? "this machine"}"`);
     if (options.guided) {
       log("Your bots and conversations are saved automatically.");
       log(`Details if you need help: ${logPath}`);
