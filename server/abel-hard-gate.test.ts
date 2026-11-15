@@ -78,10 +78,33 @@ describe("abelHardGate on connected-app and MCP tools", () => {
     expect(recipientCount({ from_email: "me@x.com", reply_to: "me@x.com", to: "a@x.com" })).toBe(1);
   });
 
+  it("a tool call that switches trading to live or real money asks", () => {
+    expect(gated("mcp__total__go_live")).toBe("live-trading");
+    expect(gated("mcp__total__goLive", {})).toBe("live-trading");
+    expect(gated("mcp__total__set_trading_mode", { mode: "live" })).toBe("live-trading");
+    expect(gated("mcp__broker__update_settings", { account: { paper: false } })).toBe("live-trading");
+    expect(gated("mcp__broker__configure", { live_trading: true })).toBe("live-trading");
+    expect(gated("mcp__total__set_trading_mode", { mode: "paper" })).toBeNull();
+    expect(gated("mcp__total__get_mode", { mode: "live" })).toBeNull();
+  });
+
+  it("one-word trade tools ask", () => {
+    for (const tool of ["mcp__total__submitorder", "mcp__total__placeorder", "mcp__total__closeallpositions", "mcp__total__flattenall", "mcp__broker__buymarket"]) expect(gated(tool), tool).toBe("trade");
+    expect(gated("mcp__total__getorders")).toBeNull();
+  });
+
+  it("addresses separated only by spaces each count", () => {
+    expect(gated("GMAIL_SEND_EMAIL", { recipient_email: emails(30).join(" ") })).toBe("mass-send");
+    expect(recipientCount({ to: "Ana Lima <ana@x.com>" })).toBe(1);
+    expect(recipientCount({ phone_numbers: "+15550001111 +15550002222 +15550003333" })).toBe(3);
+  });
+
   it("typing a password or credential asks", () => {
     expect(gated("mcp__browser__fill", { selector: "input[type=password]", value: "hunter2" })).toBe("credential");
     expect(gated("mcp__playwright__browser_type", { element: "Password field", text: "hunter2" })).toBe("credential");
     expect(gated("GITHUB_CREATE_REPO_SECRET", { secret: "s3cr3t" })).toBe("credential");
+    expect(gated("mcp__vendor__configure", { headers: { "API-Key": "k-123" } })).toBe("credential");
+    expect(gated("mcp__vendor__connect", { token: "t-123" })).toBe("credential");
     expect(gated("mcp__browser__fill", { selector: "#search", value: "shoes" })).toBeNull();
     expect(gated("mcp__claude-in-chrome__form_input", { ref: "ref_12", value: "hunter2", action_summary: "Enters the account password" })).toBe("credential");
     expect(gated("mcp__claude-in-chrome__form_input", { ref: "ref_3", value: "Austin", action_summary: "Sets the city to Austin" })).toBeNull();
@@ -116,6 +139,16 @@ describe("commandHardGate on shell commands", () => {
     ["security add-generic-password -a me -s svc -w hunter2", "credential"],
     ["mysql --password=hunter2 -e 'select 1'", "credential"],
     ["mysql -uroot -pS3cret -e 'select 1'", "credential"],
+    ["echo hunter2 | sudo --stdin true", "credential"],
+    ["curl -X POST http://127.0.0.1:8080/api/or''ders -d qty=1", "trade"],
+    ["curl -X POST http://127.0.0.1:8080/api/\"or\"ders -d qty=1", "trade"],
+    ["curl -X POST http://127.0.0.1:8080/api/%6Frders -d qty=1", "trade"],
+    ["curl -X POST http://127.0.0.1:8080/api/%256Frders -d qty=1", "trade"],
+    ["curl -X POST http://127.0.0.1:8080/api/./orders -d qty=1", "trade"],
+    ["curl -X POST http://127.0.0.1:8080/api//orders -d qty=1", "trade"],
+    ["curl -X POST http://127.0.0.1:8080/api/x/../orders -d qty=1", "trade"],
+    ["curl http://127.0.0.1:8080/api/orders --data-ascii qty=1", "trade"],
+    ["curl http://127.0.0.1:8080/api/orders --data-urlencode qty=1", "trade"],
     ["wget --post-data 'qty=1' http://127.0.0.1:8080/api/orders", "trade"],
     ["http POST 127.0.0.1:8080/api/orders qty:=1", "trade"],
     ["xh POST :8080/api/orders qty=1", "trade"],
@@ -248,6 +281,16 @@ describe("Claude Code PreToolUse hook", () => {
     child.on("close", (code) => resolve({ code, stdout }));
     child.stdin.end(stdin);
   });
+
+  it("fails closed: a call it cannot finish reading in time asks", async () => {
+    const child = spawn(process.execPath, [HOOK], { stdio: ["pipe", "pipe", "inherit"] });
+    let stdout = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
+    child.stdin.write("{\"hook_event_name\":\"PreToolUse\"");
+    const code = await new Promise<number | null>((resolve) => child.on("close", resolve));
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout).hookSpecificOutput.permissionDecision).toBe("ask");
+  }, 10_000);
 
   it("the helper prints ask for a gated command, nothing for a benign one, and always exits 0", async () => {
     const gatedRun = await run(JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "stripe refunds create --charge ch_1" } }));

@@ -10,6 +10,9 @@ const done = (out?: string) => {
   process.stdout.write(out, () => process.exit(0));
 };
 process.stdout.on("error", () => process.exit(0));
+const ASK = (reason: string) => JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: `Abel hard gate: ${reason}` } });
+// Fails closed: a check that has not finished before Claude Code's own 5 s hook timeout asks rather than lets it run.
+setTimeout(() => done(ASK("this call could not be checked in time.")), 3_500).unref();
 
 let data = "";
 let bytes = 0;
@@ -18,7 +21,7 @@ process.stdin.on("data", (chunk: string) => {
   bytes += Buffer.byteLength(chunk);
   // An input too large to read is still a tool call: it asks rather than run unseen.
   if (bytes > MAX_INPUT_BYTES) {
-    done(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: "Abel hard gate: this call was too large to check." } }));
+    done(ASK("this call was too large to check."));
     return;
   }
   data += chunk;

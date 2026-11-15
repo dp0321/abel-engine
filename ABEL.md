@@ -35,7 +35,8 @@ One module, `ABEL_DEFAULTS` (it lives in `packages/phone-protocol/src/abel-defau
 | `clientTokenFile` | `"abel-client-token"` | `serve` keeps a working local token in this data-dir file (0600) for Abel's HQ; see below |
 | `bindHost` | `"127.0.0.1"` | The server listens on loopback only; `serve --lan` and `OMB_LAN=1` are refused. Reach it from elsewhere with `--tunnel`, `--tailscale`, `--domain` or `--public-url`, each behind pairing. |
 | `analytics` | `false` | No product analytics until the person turns them on in Settings → General (`src/lib/analytics.ts`) |
-| `sponsorOffers` | `false` | No Boat credit card, no ModelGo offer, no upstream announcements feed (which carries sponsor cards). Your own Composio, your own keys and local CLIs are untouched. |
+| `sponsorOffers` | `false` | No Boat credit card, no ModelGo offer, no upstream announcements feed (which carries sponsor cards). Your own Composio, your own keys and local CLIs are untouched. Upstream's managed Composio broker (desktop registration, Cloud home) is off unless `ABEL_MANAGED_COMPOSIO=1` (`electron/managed-composio.mjs`). |
+| `upstreamFetches` | `false` | No pull of upstream's model manifest (the bundled copy stands) and no update check; when turned on, the update check reads dp0321/abel-engine and never suggests `npm install -g openmausbot` |
 | `hardGates` | `true` | The standing hard gates below |
 | `massSendRecipients` | `25` | More recipients than this in one send, or more sends than this in one batch, is a mass send |
 
@@ -48,14 +49,19 @@ under every saved rule ("Send without asking", saved commands, always-allow) —
   broker app (Stripe, PayPal, Square, Plaid, Wise, Coinbase, Alpaca, OANDA, Robinhood and the others in `FINANCE_APPS`).
 - **Trades:** order, trade, buy, sell, swap, flatten, liquidate, close-position tools; Total `POST /api/orders`, any
   `flatten` call; live-broker order endpoints (OANDA `api-fxtrade`, Alpaca live, Tradier, Tastytrade, Schwab).
-- **Live trading flips:** `/api/…/live`, `/api/go-live`, `*_LIVE=1`, `trading_mode=live`, `--live-trading`.
+- **Live trading flips:** `/api/…/live`, `/api/go-live`, `*_LIVE=1`, `trading_mode=live`, `--live-trading`; any tool named
+  go-live / live-mode / live-trading, and any tool argument that sets a mode, environment or account type to live or real
+  money, sets a live flag, or turns paper/sandbox/demo off.
 - **Mass sends:** bulk, broadcast, blast or mass tools; sending a campaign; one send to more than 25 recipients
   (to + cc + bcc and other recipient fields); more than 25 sends in one batch.
 - **Typed credentials:** a tool argument named password, passcode, OTP, secret, API key, token or private key; typing
   into a field labelled password or one-time code; `security add-generic-password`, `op item create`, `--password=…`,
   `sshpass`, `passwd`, `sudo -S`.
 
-Reads (get, list, fetch, search…) never gate.
+Reads (get, list, fetch, search…) never gate. Shell lines are also matched after normalizing what the shell and server
+would read: joined quotes (`or''ders`, `"or"ders`) and backslashes dropped, percent-escapes decoded (twice-encoded
+too), and `/./`, `//` and `/x/../` collapsed. The Claude Code hook fails closed: a call it cannot finish checking within
+3.5 s gets "ask".
 
 ### How it is enforced
 

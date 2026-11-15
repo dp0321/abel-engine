@@ -11,7 +11,7 @@ import { removeTempDir } from "./cleanup.ts";
 // server/abel-hard-gate.test.ts.
 vi.mock("../../shared/abel-defaults.ts", async (original) => {
   const real = await original<typeof import("../../shared/abel-defaults.ts")>();
-  return { ...real, ABEL_DEFAULTS: { ...real.ABEL_DEFAULTS, productName: "MausBot", analytics: true, sponsorOffers: true } };
+  return { ...real, ABEL_DEFAULTS: { ...real.ABEL_DEFAULTS, productName: "MausBot", analytics: true, sponsorOffers: true, upstreamFetches: true } };
 });
 
 const home = mkdtempSync(join(tmpdir(), "omb-test-home-"));

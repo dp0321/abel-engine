@@ -21,6 +21,10 @@ export const ABEL_DEFAULTS = {
   analytics: false,
   /** Sponsor offers (Boat credit, ModelGo) and the upstream announcements feed that carries sponsor cards. */
   sponsorOffers: false,
+  /** Background pulls from upstream's servers: the model manifest and the update check (which reads dp0321/abel-engine
+   * when on). Off: the bundled manifest stands and no update is looked for. Upstream's managed Composio broker is off
+   * separately, unless ABEL_MANAGED_COMPOSIO=1 (electron/managed-composio.mjs). */
+  upstreamFetches: false,
   /** The standing hard gates (abel-hard-gate.ts): money, trades, live flips, mass sends and typed credentials ask every time. */
   hardGates: true,
   /** More recipients than this in one send is a mass send. */

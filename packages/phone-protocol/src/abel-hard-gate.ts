@@ -19,6 +19,14 @@ const MONEY = new Set([
   "WITHDRAW", "WITHDRAWAL", "WITHDRAWALS", "DEPOSIT", "DEPOSITS", "REMIT", "WIRE", "TOPUP", "TOPUPS",
 ]);
 const TRADE = new Set(["TRADE", "TRADES", "ORDER", "ORDERS", "BUY", "SELL", "SWAP", "FLATTEN", "LIQUIDATE", "SHORT"]);
+/** One-word tool names: submitorder, placetrade, closeallpositions, flattenall. */
+const TRADE_WORD = /^(PLACE|SUBMIT|CREATE|SEND|NEW|EXECUTE|OPEN|MODIFY|REPLACE|AMEND|CANCEL|CLOSE)(ALL)?(ORDERS?|TRADES?|POSITIONS?)$|^(BUY|SELL)(STOCK|SHARES?|CRYPTO|COIN|MARKET|LIMIT|ORDER)?$|^FLATTEN(ALL|POSITIONS?)?$/;
+/** Words that switch trading to live / real money: go_live, goLive, set_live_mode, enable_live_trading. */
+const LIVE_WORD = /^(GO)?LIVE(MODE|TRADING)?$/;
+const LIVE_KEY = /^(mode|trading[-_]?mode|trade[-_]?mode|execution[-_]?mode|account[-_]?(type|mode)|environment|env)$/i;
+const LIVE_VALUE = /^\s*(live|real|real[-_ ]?money|live[-_ ]?trading)\s*$/i;
+const LIVE_FLAG = /^(live|is[-_]?live|live[-_]?(mode|trading)|real[-_]?money|go[-_]?live)$/i;
+const PAPER_FLAG = /^(paper|paper[-_]?(mode|trading)|sandbox|dry[-_]?run|simulat\w*|practice|demo)$/i;
 const BULK = new Set(["BULK", "BROADCAST", "BROADCASTS", "BLAST", "MASS"]);
 const CAMPAIGN_SENDS = new Set(["SEND", "SCHEDULE", "LAUNCH", "START", "TRIGGER"]);
 
@@ -38,7 +46,7 @@ const SHELL_TOOLS = new Set([
 const RECIPIENT_KEY = /^(to|cc|bcc|recipients?|\w*_recipients?|recipient_\w+|\w*_?emails?|email_?addresses|\w*_addresses|(to|cc|bcc)_\w+|contacts|phone_?numbers?|\w*_phones?|numbers|members|invitees|attendees|guests|participants|user_?ids|users|channels|audience)$/i;
 const NOT_RECIPIENT = /^(from|sender|reply_?to)(_\w+)?$/i;
 const ADDRESS = /^\s*(?:[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+|\+?[\d ()-]{7,})\s*$/;
-const CREDENTIAL_KEY = /^(pass(word|wd|phrase|code)?|pwd|pin|otp|totp|mfa_?code|two_?factor_?code|2fa_?code|verification_?code|one_?time_?code|secret|client_?secret|api_?key|access_?token|refresh_?token|auth_?token|bearer_?token|private_?key|credentials?)$/i;
+const CREDENTIAL_KEY = /^(x[-_]?)?(pass(word|wd|phrase|code)?|pwd|pin|otp|totp|mfa[-_]?code|two[-_]?factor[-_]?code|2fa[-_]?code|verification[-_]?code|one[-_]?time[-_]?code|secret|client[-_]?secret|api[-_]?key|token|access[-_]?token|refresh[-_]?token|auth[-_]?token|bearer[-_]?token|private[-_]?key|credentials?)$/i;
 const FIELD_KEY = /^(selector|element|field|ref|target|label|name|placeholder|input_?type|locator|action_?summary|description|summary)$/i;
 const SECRET_FIELD = /pass(word|wd|code|phrase)|credential|one[- ]time code|\botp\b|2fa|security code/i;
 const TYPING = new Set(["TYPE", "FILL", "INPUT", "ENTER", "SET", "KEYBOARD"]);
@@ -78,6 +86,14 @@ function walk(value: unknown, visit: (key: string, value: unknown) => void, dept
   }
 }
 
+/** Addresses in one recipient field, however they are separated: emails, else phone numbers, else comma-separated names. */
+function addressesIn(value: string): number {
+  const emails = value.match(/[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']+/g)?.length ?? 0;
+  if (emails) return emails;
+  const phones = value.match(/\+?\d[\d().-]{6,}\d/g)?.length ?? 0;
+  return phones || value.split(/[,;\n]/).filter((part) => part.trim()).length;
+}
+
 /** How many people one call addresses, counted from its recipient fields. */
 export function recipientCount(input: unknown, depth = 0): number {
   if (depth > 5) return 0;
@@ -91,9 +107,21 @@ export function recipientCount(input: unknown, depth = 0): number {
       const addresses = Array.isArray(value) ? value.filter((item) => typeof item === "string" && ADDRESS.test(item)).length : 0;
       count += addresses || recipientCount(value, depth + 1);
     } else if (Array.isArray(value)) count += value.length;
-    else if (typeof value === "string") count += value.split(/[,;\n]/).filter((part) => part.trim()).length;
+    else if (typeof value === "string") count += addressesIn(value);
   }
   return count;
+}
+
+/** Does a call's arguments switch trading to live or real money? */
+function switchesToLive(input: unknown): boolean {
+  let found = false;
+  walk(input, (key, value) => {
+    if (found) return;
+    if (LIVE_KEY.test(key) && typeof value === "string" && LIVE_VALUE.test(value)) found = true;
+    else if (LIVE_FLAG.test(key) && (value === true || value === 1 || (typeof value === "string" && /^(true|1|on|yes)$/i.test(value)))) found = true;
+    else if (PAPER_FLAG.test(key) && (value === false || value === 0 || (typeof value === "string" && /^(false|0|off|no)$/i.test(value)))) found = true;
+  });
+  return found;
 }
 
 function typesACredential(action: string[], input: unknown): boolean {
@@ -108,7 +136,7 @@ function typesACredential(action: string[], input: unknown): boolean {
 }
 
 const HTTP_CALL = /(\b(curl|wget|https?|xhs?|httpx|urllib|axios)\b|https?:\/\/|fetch\(|requests\.\w+\(|Invoke-(RestMethod|WebRequest))/i;
-const WRITE_METHOD = /(-X\s*['"]?(POST|PUT|PATCH|DELETE)\b|--request[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|(^|\s)(-d|--data(-raw|-binary|-urlencode)?|--json|-F|--form|--post-data|--post-file|--body-data|--body-file)(\s|=)|--method[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|\b(https?|xhs?)\s+(-{1,2}[\w-]+(=\S+)?\s+)*(POST|PUT|PATCH|DELETE)\s|\.(post|put|patch|delete)\(|method\s*[:=]\s*['"]?(POST|PUT|PATCH|DELETE)\b|\b(POST|PUT|PATCH|DELETE)\s+https?:|\burlopen\([^)]*\bdata\s*=|\bRequest\([^)]*\bdata\s*=|\burlopen\(\s*[\w.]+\s*,\s*[^)\s])/i;
+const WRITE_METHOD = /(-X\s*['"]?(POST|PUT|PATCH|DELETE)\b|--request[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|(^|\s)(-d|--data(-raw|-binary|-urlencode|-ascii)?|--json|-F|--form|--post-data|--post-file|--body-data|--body-file)(\s|=)|--method[=\s]+['"]?(POST|PUT|PATCH|DELETE)\b|\b(https?|xhs?)\s+(-{1,2}[\w-]+(=\S+)?\s+)*(POST|PUT|PATCH|DELETE)\s|\.(post|put|patch|delete)\(|method\s*[:=]\s*['"]?(POST|PUT|PATCH|DELETE)\b|\b(POST|PUT|PATCH|DELETE)\s+https?:|\burlopen\([^)]*\bdata\s*=|\bRequest\([^)]*\bdata\s*=|\burlopen\(\s*[\w.]+\s*,\s*[^)\s])/i;
 
 interface CommandRule { kind: HardGateKind; label: string; test: (command: string) => boolean }
 
@@ -135,7 +163,7 @@ const COMMAND_RULES: CommandRule[] = [
   {
     kind: "credential", label: "typing a password or credential",
     test: (c) => /\bsecurity\s+(add|set)-(generic|internet)-password\b/i.test(c) || /\bop\s+item\s+(create|edit)\b/i.test(c) ||
-      /\bsshpass\b|\bchpasswd\b|(^|[\s;&|])passwd\b|\bsudo\s+-S\b/i.test(c) || /--password[=\s]+\S/i.test(c) ||
+      /\bsshpass\b|\bchpasswd\b|(^|[\s;&|])passwd\b/i.test(c) || /\bsudo\s+(-[a-zA-Z]*S\b|--stdin\b)/.test(c) || /--password[=\s]+\S/i.test(c) ||
       /\b(mysql|mysqldump|mysqladmin|mariadb)\b[^|;&]*\s-p\S+/.test(c),
   },
 ];
@@ -150,9 +178,23 @@ function commandOf(tool: string, input: unknown): string | undefined {
   return undefined;
 }
 
+/** The command as the shell and the server would read it: quotes the shell joins and backslashes dropped, percent-escapes
+ * decoded, `/./`, `//` and `/x/../` collapsed. Rules match the raw line and this one. */
+export function normalizedCommand(command: string): string {
+  let text = command.replace(/['"\\]/g, "");
+  for (let i = 0; i < 3; i++) text = text.replace(/%([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+  let previous = "";
+  while (previous !== text) {
+    previous = text;
+    text = text.replace(/\/\.(?=\/)/g, "").replace(/([^:/])\/{2,}/g, "$1/").replace(/\/(?!\.\.\/)[^/\s]+\/\.\.(?=\/)/g, "");
+  }
+  return text;
+}
+
 /** The hard gate a shell command meets, or null. */
 export function commandHardGate(command: string): HardGate | null {
-  const rule = COMMAND_RULES.find((one) => one.test(command));
+  const normalized = normalizedCommand(command);
+  const rule = COMMAND_RULES.find((one) => one.test(command) || one.test(normalized));
   return rule ? { kind: rule.kind, label: rule.label } : null;
 }
 
@@ -172,9 +214,10 @@ export function abelHardGate(call: { tool: string; input?: unknown; commandLine?
   if (action.length === 0) return null;
   if (typesACredential(action, call.input)) return { kind: "credential", label: "typing a password or credential" };
   if (isReadOnlyTool(call.tool)) return null;
+  if (action.some((token) => LIVE_WORD.test(token)) || switchesToLive(call.input)) return { kind: "live-trading", label: "a switch to live or real-money trading" };
   if (FINANCE_APPS.has(app)) return { kind: "money", label: `${app.toLowerCase()}: ${action.join(" ").toLowerCase()}` };
   if (action.some((token) => MONEY.has(token))) return { kind: "money", label: "a payment or money move" };
-  if (action.some((token) => TRADE.has(token)) || (action.includes("CLOSE") && action.some((t) => t.startsWith("POSITION")))) {
+  if (action.some((token) => TRADE.has(token) || TRADE_WORD.test(token)) || (action.includes("CLOSE") && action.some((t) => t.startsWith("POSITION")))) {
     return { kind: "trade", label: "a trade or order" };
   }
   if (action.some((token) => BULK.has(token)) || (action.includes("CAMPAIGN") && action.some((token) => CAMPAIGN_SENDS.has(token)))) {

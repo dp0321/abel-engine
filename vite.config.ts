@@ -44,10 +44,11 @@ const include = [
   "scripts/**/*.test.ts",
 ];
 
-/** These boot the server with the enterprise layer's own workspace-access module; Abel Engine ships without enterprise/. */
+/** These read or boot the enterprise layer's workspace-access module (the verification docs cite it); Abel Engine ships
+ * without enterprise/. */
 const enterpriseOnlyTests = existsSync(page("./enterprise/server/workspace-access.ts"))
   ? []
-  : ["server/hosted-access.test.ts", "server/hosted-models-api.test.ts"];
+  : ["server/hosted-access.test.ts", "server/hosted-models-api.test.ts", "scripts/testing/verification-docs.test.ts"];
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), railPage()],
