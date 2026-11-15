@@ -42,3 +42,7 @@ deploy/podman/.env
 deploy/podman/.env.*
 !deploy/podman/.env.example
 /.env
+
+# The build stamp abel-lite setup writes after each build of this checkout. Never commit it: a tracked copy makes the
+# next pin move fail with "untracked working tree files would be overwritten".
+/.abel-built-sha

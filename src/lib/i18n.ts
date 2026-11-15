@@ -96,7 +96,8 @@ export function activePackComplete(): boolean {
 
 /** `{app}` is the product's name as a person reads it (productName) unless `params` names it. */
 export function t(key: LocaleKey, params?: Record<string, string | number>): string {
-  const template = abelCopy(key, activePack[key] ?? en[key]);
+  const own = activePack[key];
+  const template = abelCopy(key, own ?? en[key], own === undefined || activePack === en);
   if (!params && !template.includes("{app}")) return template;
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
     params && name in params ? String(params[name]) : name === "app" ? productName() : match,
