@@ -60,6 +60,7 @@ import type { KeepWarmContract } from "./claude-keepwarm.ts"; import { claudeFor
 import { BACKGROUND_CALL_TIMEOUT_MS, backgroundCallArgs, spawnBackgroundCall } from "./claude-background.ts"; import { withEndpointFolder } from "./claude-endpoint-folder.ts";
 import { permissionLaunchCwd, shellRequest } from "./permission-command.ts"; import { readToolPaths } from "../own-file-reads.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts"; import { OWN_APPS_SERVER } from "../../shared/own-apps.ts";
+import { ABEL_DEFAULTS } from "../../shared/abel-defaults.ts"; import { abelHardGate } from "../../shared/abel-hard-gate.ts"; import { abelGateHookSettings, hookCommand } from "./claude-hook-command.ts";
 import { extractMcpImages } from "../mcp-tool-images.ts"; import { claudeToolDraft } from "./tool-progress.ts"; import { redactSecretsInText } from "../../shared/redact.ts";
 import {
   ASK_USER_QUESTION_TOOL,
@@ -413,13 +414,7 @@ export function hookTokenFile(threadId: string, botId?: string): string {
 /** Hooks for the private --settings file. Claude Code runs each command with the event JSON on
  * stdin and applies any hookSpecificOutput it prints. */
 export function claudeHookSettings(helperPath: string, platform: NodeJS.Platform = process.platform): Record<string, unknown> {
-  // Claude Code runs `command` as a shell line: sh on macOS and Linux; on Windows Git Bash, or PowerShell
-  // when Git Bash is missing, and the two quote differently. Given `args` (2.1.139), it starts `command` itself.
-  // JSON quoting is not shell quoting: $(), backticks and $names expand inside double quotes.
-  const hook = platform === "win32"
-    ? { type: "command", command: process.execPath, args: [helperPath], timeout: 5 }
-    : { type: "command", command: [process.execPath, helperPath].map(path => `'${path.replace(/'/g, "'\\''")}'`).join(" "), timeout: 5 };
-  const entry = [{ matcher: "", hooks: [hook] }];
+  const entry = [{ matcher: "", hooks: [hookCommand(helperPath, platform)] }];
   return { PostToolUse: entry, PostToolUseFailure: entry, PreCompact: entry, SessionStart: entry, Stop: entry };
 }
 
@@ -1003,6 +998,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         : turn.approvalMode === "full" ? "bypassPermissions"
           : turn.approvalMode === "auto" ? "auto"
             : turn.approvalMode === "edits" ? "acceptEdits" : "default";
+      const abelGateHooked = ABEL_DEFAULTS.hardGates && !turn.guestConfined;
       const controlsHost = turn.integrations?.localComputer?.scope === "local-computer";
       if (controlsHost && permissionMode === "bypassPermissions" && turn.approvalMode !== "full") {
         throw new Error("local computer control requires the interactive approval broker");
@@ -1142,7 +1138,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       // Full access keeps ask_user: native bypass skips permission prompts, not questions.
       let broker: Awaited<ReturnType<typeof createPermissionBroker>> | undefined;
       const socketPath = permissionSocketPath(threadId, botId);
-      if (permissionMode !== "bypassPermissions") {
+      if (permissionMode !== "bypassPermissions" || abelGateHooked) { // Abel's hard-gate hook asks through this tool under bypass too
         args.push("--permission-prompt-tool", "mcp__ogb__approve");
       }
       const permissionEnv = { ...NODE_ENV_FLAG, ...(turn.toolScope !== undefined ? { OMB_PERMISSION_TOOL_SCOPE: JSON.stringify(turn.toolScope) } : {}) };
@@ -1178,6 +1174,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       // Project-only settings still find the personal memory via ancestors when the bot lives under HOME.
       if (isolated) own.claudeMdExcludes = [join(homedir(), ".claude", "CLAUDE.md")];
       if (hooks) own.hooks = claudeHookSettings(HOOK_HELPER_PATH);
+      if (abelGateHooked) { own.hooks = { ...(own.hooks as Record<string, unknown> | undefined), ...abelGateHookSettings(SPAWNED_PROXIES.abelGate) }; if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = "1"; }
       if (turn.guestConfined) own.permissions = GUEST_CLAUDE_PERMISSIONS;
       // Approvals and browser credentials expire at the turn boundary; native background workers and cron jobs must not outlive it.
       env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = env.CLAUDE_CODE_DISABLE_CRON = "1";
@@ -1277,7 +1274,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
                   ? nativeMode === "auto" ? "active" : "inactive"
                   : undefined;
               const questions = askQuestions(ask);
-              emit({
+              const hardGate = ask.kind === "permission" && typeof ask.tool === "string" ? abelHardGate({ tool: ask.tool, input: ask.input }) : null; emit({
                 ...base(threadId, eventTurnId),
                 type: "request.opened",
                 requestId: ask.id,
@@ -1287,8 +1284,9 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
                 // The Bash command, for exact-command grants and for the safety floor.
                 ...shellRequest(ask.kind === "permission" && ask.tool === "Bash" ? ask.input.command : undefined, commandCwd), ...(ask.kind === "permission" && readToolPaths(ask.tool, ask.input) ? { reads: readToolPaths(ask.tool, ask.input) } : {}),
                 requiresExplicitApproval: ask.kind === "permission" && ask.tool === "Bash" && ask.input.dangerouslyDisableSandbox === true || undefined,
+                ...(hardGate ? { hardGate: hardGate.label } : {}),
                 nativeReview,
-                allowSession: ask.kind === "permission" && !(controlsHost && typeof ask.tool === "string" && ask.tool.startsWith("mcp__computer")) ? true : undefined,
+                allowSession: ask.kind === "permission" && !hardGate && !(controlsHost && typeof ask.tool === "string" && ask.tool.startsWith("mcp__computer")) ? true : undefined,
                 approvalScope:
                   typeof ask.tool === "string" && controlsHost && ask.tool.startsWith("mcp__computer")
                     ? "local-computer"

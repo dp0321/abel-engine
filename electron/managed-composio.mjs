@@ -13,11 +13,13 @@ export function ownComposioKey(credentials, environment = process.env) {
   return Boolean((typeof saved === "string" && saved.trim()) || environment.COMPOSIO_API_KEY?.trim());
 }
 
-/** An explicit URL wins; otherwise the default, only for a shipped build, so development and tests never register. */
-export function managedComposioBrokerUrl(configured, shipped) {
-  if (managedComposioBrokerOff()) return "";
+/** An explicit URL wins. Abel Engine: upstream's default service only when ABEL_MANAGED_COMPOSIO=1 opts in, and only for a
+ * shipped build; otherwise nothing registers there (connected apps use your own Composio key). */
+export function managedComposioBrokerUrl(configured, shipped, environment = process.env) {
+  if (managedComposioBrokerOff(environment)) return "";
   const explicit = typeof configured === "string" ? configured.trim() : "";
-  return normalizeManagedComposioBrokerUrl(explicit || (shipped ? DEFAULT_MANAGED_COMPOSIO_BROKER_URL : ""));
+  const optedIn = environment.ABEL_MANAGED_COMPOSIO?.trim() === "1";
+  return normalizeManagedComposioBrokerUrl(explicit || (shipped && optedIn ? DEFAULT_MANAGED_COMPOSIO_BROKER_URL : ""));
 }
 
 export function normalizeManagedComposioBrokerUrl(value) {

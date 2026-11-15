@@ -207,7 +207,7 @@ it("on a Cloud only its owner ever used, a routine with nobody's writer or none,
     const run = await claudeRun(id);
     expect(after(run.argv, "--permission-mode")).toBe("bypassPermissions");
     expect(run.argv).not.toContain("--restricted");
-    expect(run.argv).not.toContain("--permission-prompt-tool");
+    expect(run.argv).toContain("--permission-prompt-tool"); // Abel hard-gate hook
     await release(bot.id);
   }
   rmSync(claudeDump(), { force: true });
@@ -255,7 +255,7 @@ it("a Full access bot's routine from the owner's chat runs at Full access after 
   const run = await claudeRun(mine);
   expect(after(run.argv, "--permission-mode")).toBe("bypassPermissions");
   expect(run.argv).not.toContain("--restricted");
-  expect(run.argv).not.toContain("--permission-prompt-tool");
+  expect(run.argv).toContain("--permission-prompt-tool"); // Abel hard-gate hook
   await release(bot.id);
 
   rmSync(codexDump(), { force: true });

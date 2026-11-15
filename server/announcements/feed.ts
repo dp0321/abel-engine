@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import bundledFeedJson from "../../announcements/announcements.json" with { type: "json" };
+import { ABEL_DEFAULTS } from "../../shared/abel-defaults.ts";
 import { ANNOUNCEMENTS_URL, liveCards, parseAnnouncementFeed, type AnnouncementCard, type AnnouncementFeed } from "../../shared/announcements.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
@@ -225,5 +226,5 @@ function message(error: unknown): string {
 let store: AnnouncementStore | undefined;
 
 export function announcementStore(): AnnouncementStore {
-  return store ??= new AnnouncementStore({ dataDir: DATA_DIR });
+  return store ??= new AnnouncementStore({ dataDir: DATA_DIR, ...(ABEL_DEFAULTS.sponsorOffers ? {} : { env: { ...process.env, [ANNOUNCEMENTS_DISABLE_ENV]: "1" } }) });
 }

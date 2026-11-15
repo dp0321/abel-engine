@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { ABEL_DEFAULTS } from "../../shared/abel-defaults.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
 import type { ModelCatalog } from "../contracts.ts";
@@ -68,7 +69,8 @@ export class ModelManifestStore {
   }
 
   get fetchDisabled(): boolean {
-    return (this.options.env ?? process.env)[MANIFEST_DISABLE_ENV] === "1";
+    // Abel Engine: upstream's manifest is never fetched unless ABEL_DEFAULTS.upstreamFetches is on; the bundled copy stands.
+    return !ABEL_DEFAULTS.upstreamFetches || (this.options.env ?? process.env)[MANIFEST_DISABLE_ENV] === "1";
   }
 
   /** The newest usable manifest. Reads the disk cache once and never waits on the network. */

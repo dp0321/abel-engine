@@ -38,7 +38,8 @@ const api = async (method: string, path: string, body?: unknown, token = admin) 
 const bot = async (name: string) => {
   const created = await api("POST", "/api/bots", { name });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
-  expect((await api("PATCH", `/api/bots/${created.body.bot.id}`, { approvalMode: "ask" })).status).toBe(200);
+  // Abel's default is Send without asking; these bots keep upstream's ask-every-time rule.
+  expect((await api("PATCH", `/api/bots/${created.body.bot.id}`, { approvalMode: "ask", outbound: { policy: "ask" } })).status).toBe(200);
   return created.body.bot;
 };
 const mint = async (botId: string, threadId: string, kind = "connectors") => {
@@ -673,4 +674,24 @@ it("preserves accounts referenced by a fallback chain before delete or credentia
   expect((await api("PATCH", `/api/instances/${instanceId}`, { configDir: join(fixture.info.dataDir, "synthetic-account-directory") })).status).toBe(409);
   await api("PATCH", `/api/bots/${b.id}`, { fallback: [] });
   expect((await api("DELETE", `/api/instances/${instanceId}`)).status).toBe(200);
+});
+
+it("Abel hard gate: a mass send asks at Full access with no rule, and only a paired owner may allow it", async () => {
+  const b = noRuleBot;
+  const token = await mint(b.id, b.threadId);
+  const before = relayed.length;
+  const extra = Array.from({ length: 29 }, (_, i) => `guest${i}@example.test`);
+  const held = relay(token, "GMAIL_SEND_EMAIL", { recipient_email: "host@example.test", extra_recipients: extra, subject: "Party", body: "Come." });
+  const card = await pending(b.threadId);
+  expect(card.card.hardGate).toMatch(/more than 25/);
+  const answer = (headers: Record<string, string>) => fetch(fixture.info.url + `/api/threads/${b.threadId}/respond`, {
+    method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ requestId: card.card.requestId, behavior: "allow" }),
+  });
+  // A bot's shell is an unsigned local caller: it cannot approve its own card, even on an owner-trust server.
+  expect((await answer({})).status).toBe(403);
+  expect((await answer({ authorization: `Bearer ${member}` })).status).toBe(403);
+  expect(relayed).toHaveLength(before);
+  expect((await answer({ authorization: `Bearer ${admin}` })).status).toBe(200);
+  expect((await held).body.result.isError).not.toBe(true);
+  expect(relayed).toHaveLength(before + 1);
 });

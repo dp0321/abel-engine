@@ -1,10 +1,11 @@
 // A self-hosted server cannot replace itself, so this only says whether a newer version exists and how this install is updated.
 import { existsSync } from "node:fs";
+import { ABEL_DEFAULTS } from "../shared/abel-defaults.ts";
 import { join, sep } from "node:path";
 
-export const LATEST_RELEASE_URL = "https://api.github.com/repos/milind-soni/OpenMausBot/releases/latest";
+export const LATEST_RELEASE_URL = "https://api.github.com/repos/dp0321/abel-engine/releases/latest";
 /** Written by .github/workflows/promote-stable.yml: the released version our own Clouds have run for 48 hours. */
-export const STABLE_CHANNEL_URL = "https://raw.githubusercontent.com/milind-soni/OpenMausBot/channels/stable.json";
+export const STABLE_CHANNEL_URL = "https://raw.githubusercontent.com/dp0321/abel-engine/channels/stable.json";
 const CACHE_MS = 60 * 60_000;
 /** How long the last answer stands in when the channel cannot be read: an outage of GitHub is no reason to say nothing. */
 const STALE_MS = 24 * 60 * 60_000;
@@ -28,7 +29,8 @@ export function updateCommand(install: InstallKind, target?: { version: string; 
   switch (install) {
     case "docker": return { command: target && !target.stable ? `git pull && ./update.sh --version ${target.version}` : "git pull && ./update.sh", restart: false };
     case "podman": return { command: "git pull && cd deploy/podman && PODMAN_COMPOSE_PROVIDER=podman-compose podman compose --env-file .env -f compose.yaml up -d --build", restart: false };
-    case "npm": return { command: `npm install -g openmausbot@${target?.version ?? "latest"}`, restart: true };
+    // Abel Engine is not published to npm: an install is a checkout of dp0321/abel-engine.
+    case "npm": return { command: "git pull && pnpm install --frozen-lockfile && pnpm build:server", restart: true };
     case "git": return { command: "git pull && pnpm install", restart: true };
     default: return undefined;
   }
@@ -136,7 +138,7 @@ export function createUpdateChecker(options: {
   }
 
   return async function check(): Promise<UpdateCheck> {
-    if (options.install === "desktop" || options.install === "managed") return base();
+    if (!ABEL_DEFAULTS.upstreamFetches || options.install === "desktop" || options.install === "managed") return base();
     if (cached && now() - cached.at < CACHE_MS) return cached.result;
     inflight ??= (async () => {
       try {

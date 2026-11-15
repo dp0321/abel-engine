@@ -75,6 +75,8 @@ function interrupt(): void {
 }
 
 beforeEach(() => {
+  // Upstream's owner-trust serve; Abel's service-trust default is covered by abel-serve.e2e.test.ts.
+  vi.stubEnv("OMB_LOOPBACK_TRUST", "owner");
   vi.resetAllMocks();
   mocks.denyLogOpen = false;
   dataDir = mkdtempSync(join(process.env.HOME!, "cli-lifecycle-"));
@@ -260,7 +262,7 @@ describe("CLI startup lifecycle", () => {
     expect(pairings).toEqual(guided ? [{}] : []);
     expect(output.includes(`http://127.0.0.1:${options.port}/pair#code=${code}`)).toBe(guided);
     expect(output.includes("Sign in from a browser on this computer")).toBe(guided);
-    expect(output.includes("serve --lan                      this network only, not encrypted")).toBe(!guided);
+    expect(output.includes("serve --lan")).toBe(false);
   });
 
   it.each(["mismatched", "unreachable"])("never mints a phone code for a %s public endpoint", async (failure) => {

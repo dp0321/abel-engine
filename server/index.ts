@@ -476,7 +476,7 @@ import { TeamMemory, TEAM_MEMORY_KINDS, type TeamMemoryKind } from "./team-memor
 import { describeTool } from "./activity.ts";
 import { OutboundRequestService } from "./outbound-requests.ts";
 import { createOutboundHold, OUTBOUND_HOLD_MS, type OutboundHoldAnswer } from "./outbound-hold.ts";
-import { connectorCallsIn, outboundCallsIn } from "../shared/outbound.ts";
+import { abelHardGate, abelHardGateForCalls } from "../shared/abel-hard-gate.ts"; import { ABEL_DEFAULTS } from "../shared/abel-defaults.ts"; import { connectorCallsIn, isOutboundTool } from "../shared/outbound.ts";
 import { connectorAccessDecision, describeConnectorScopes } from "../shared/connector-scopes.ts";
 import { bindThreadLogCapProvider } from "./thread-log-rotation.ts";
 import { listenWebhookIngress, type WebhookIngress } from "./webhook-ingress.ts"; import { createBotApiHost } from "./bot-api-host.ts"; import { BOT_API_PARTS, BOT_API_REFUSAL, BOT_API_TOOLS, botApiRouteRefused } from "./bot-api-fence.ts";
@@ -545,7 +545,7 @@ import {
   resolveRequestAuth,
   parseCookies,
   serializeSessionCookie,
-  sessionCookieName, ownerOrAdmin, acceptLegacyOrigins,
+  sessionCookieName, ownerOrAdmin, acceptLegacyOrigins, mayApproveHardGate, ABEL_HARD_GATE_APPROVER,
 } from "./request-auth.ts";
 import { cookieMaxAgeSeconds, formatPairingCode, pairingRequest, SessionRegistry, type SessionRecord } from "./sessions.ts"; import type { PairingErrorCode } from "../shared/pairing-code.ts";
 import { ThreadStarters } from "./thread-starters.ts"; import { createConversationShares } from "./host/conversation-shares.ts"; import { createTeamMemorySaves } from "./host/team-memory-saves.ts"; import { createConversationSharing } from "./routes/conversation-share.ts";
@@ -765,7 +765,7 @@ const DESKTOP_MANAGED = process.env.OMB_DESKTOP_PARENT === "1";
 const SHARED_WORKSPACE_FULL_ACCESS = sharedWorkspaceFullAccessConfigured();
 const sharedWorkspaceFullAccessEnabled = () => SHARED_WORKSPACE_FULL_ACCESS && Boolean(workspaceAccess) && entitled("admin");
 const HOSTED_FULL_ACCESS_REFUSAL = "On a shared company workspace Full access comes only from the operator's dedicated policy";
-if (HOSTED_WORKSPACE) setDefaultApprovalMode("ask");
+setDefaultApprovalMode(HOSTED_WORKSPACE ? "ask" : ABEL_DEFAULTS.approvalMode);
 // On a shared workspace loopback is a service, not the owner: every bot's shell is a loopback caller too.
 const LOOPBACK = resolveLoopbackTrust({ desktopManaged: DESKTOP_MANAGED, hostedWorkspace: HOSTED_WORKSPACE, cloudHome: Boolean(CLOUD_HOME), fromSource: import.meta.url.endsWith(".ts") });
 // The CLI's per-launch secret comes on stdin, never an env var: every engine this server starts inherits its environment.
@@ -1064,7 +1064,7 @@ function cloudCardRefusal(auth: RequestAuth & { kind: "session" }): string | nul
 }
 
 /** Decides only whose answer to an existing card counts; it adds no card, gate or prompt. */
-function cardAnswerRefusal(auth: RequestAuth, threadId: string, requestId: string, behavior: string): string | null {
+function cardAnswerRefusal(auth: RequestAuth, threadId: string, requestId: string, behavior: string): string | null { if (behavior !== "deny" && store.messagesFor(threadId).find((line) => line.card?.requestId === requestId)?.card?.hardGate && !mayApproveHardGate(auth)) return ABEL_HARD_GATE_APPROVER;
   if (auth.kind === "loopback") {
     return auth.trust === "service" && behavior !== "deny"
       ? "A local service can only decline this request. Approve or answer it in OpenMausBot while signed in."
@@ -6513,6 +6513,7 @@ bus.subscribe((event: RuntimeEvent) => {
         : providerToolAllowKey(providerInstanceId, event.tool, configuredMcp);
       const verdict = permission && asker && event.requestId
         ? heldAtSafetyFloor(event, autoVerdict(effectiveApprovalMode, event.tool, {
+          hardGate: event.hardGate ?? abelHardGate({ tool: event.tool, ...(event.commandLine ?? event.command?.command ? { commandLine: event.commandLine ?? event.command?.command } : {}) })?.label,
           requiresExplicitApproval: event.requiresExplicitApproval,
           commandAllowed: Boolean(command && commandAllowlist.matches(asker.id, command)),
           toolAllowed: Boolean(toolAllowKey && asker.alwaysAllow?.includes(toolAllowKey)), ownFilesRead: !guestDriven && readsOwnFiles(DATA_DIR, asker.id, event), // never in a guest's turn: the folder holds its owner's memory
@@ -6599,7 +6600,7 @@ bus.subscribe((event: RuntimeEvent) => {
             permission, guestDriven, commandAllowlist: command ?? undefined, allowKey: toolAllowKey ?? undefined,
             held: approvalHeldReason(heldContext) ?? (permission && guestDriven && routineRun ? confinedWhy(event.threadId) : undefined),
             heldCode: approvalHeldNote(heldContext),
-          }),
+          }), ...(verdict?.source === "abel-hard-gate" ? { hardGate: event.hardGate ?? "a hard-gated action" } : {}),
         },
       });
       if (event.requestId) { askMessageByRequest.set(`${event.threadId}:${event.requestId}`, message.id); if (!permission && asker) askCards.askedAgain(event.threadId, event.requestId, asker.id); }
@@ -14371,9 +14372,8 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         const rpcParams = rpc?.params && typeof rpc.params === "object" && !Array.isArray(rpc.params)
           ? (rpc.params as { name?: unknown; arguments?: unknown })
           : null;
-        const outboundCalls = rpc?.method === "tools/call" && typeof rpcParams?.name === "string"
-          ? outboundCallsIn(rpcParams.name, rpcParams.arguments)
-          : [];
+        const requestCalls = rpc?.method === "tools/call" && typeof rpcParams?.name === "string" ? connectorCallsIn(rpcParams.name, rpcParams.arguments) : [];
+        const hardGated = abelHardGateForCalls(requestCalls); const outboundCalls = requestCalls.filter((one) => isOutboundTool(one.slug) || hardGated?.calls.includes(one));
         const outboundTool = outboundCalls.length ? outboundCalls[0].slug : null;
         const refuseOutbound = (text: string) => {
           res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
@@ -14404,7 +14404,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         const held: OutboundHoldAnswer = outboundTool
           ? await outboundHold.hold({
             bot: currentSender, threadId: internalCapability.threadId, tool: outboundTool, calls: outboundCalls, opaque, fullAccess,
-            active: () => internalCapabilityIsActive(internalCapability),
+            active: () => internalCapabilityIsActive(internalCapability), ...(hardGated ? { hardGate: hardGated.gate } : {}),
           })
           : { ok: true, approved: false };
         if (!held.ok) return refuseOutbound(held.text);
@@ -14440,7 +14440,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
               try {
                 outboundHold.beforeDispatch({
                   bot: fresh, threadId: internalCapability.threadId, tool: outboundTool, opaque,
-                  fullAccess: fullAccess && sendsFreely(), approved: outboundApproved,
+                  fullAccess: fullAccess && sendsFreely(), approved: outboundApproved, ...(hardGated ? { hardGate: hardGated.gate } : {}),
                 });
               } catch (error) {
                 refuseDispatch(error instanceof Error ? error.message : String(error));

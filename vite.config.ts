@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Connect, Plugin } from "vite";
 import { configDefaults, defineConfig } from "vitest/config";
@@ -44,6 +44,12 @@ const include = [
   "scripts/**/*.test.ts",
 ];
 
+/** These read or boot the enterprise layer's workspace-access module (the verification docs cite it); Abel Engine ships
+ * without enterprise/. */
+const enterpriseOnlyTests = existsSync(page("./enterprise/server/workspace-access.ts"))
+  ? []
+  : ["server/hosted-access.test.ts", "server/hosted-models-api.test.ts", "scripts/testing/verification-docs.test.ts"];
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), railPage()],
   build: {
@@ -56,7 +62,7 @@ export default defineConfig({
     environment: "node",
     include,
     // OMB_VITEST_E2E=host (CI's Windows and macOS shards) leaves the e2e files that run on Linux only.
-    exclude: [...configDefaults.exclude, ...(hostE2eOnly() ? portableE2eFiles(root, include) : [])],
+    exclude: [...configDefaults.exclude, ...(hostE2eOnly() ? portableE2eFiles(root, include) : []), ...enterpriseOnlyTests],
     setupFiles: ["server/testing/setup.ts", "src/testing/all-locales.ts"],
     // One file at a time by default: the suite spawns fake provider CLIs and real
     // harness servers, which a laptop feels. CI sets its runner's count (scripts/ci-scope.mjs).

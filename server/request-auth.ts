@@ -18,6 +18,8 @@ export type RequestAuth =
     kind: "loopback"; scopes: readonly Scope[]; trust?: "service";
     /** Set only on the verified companion-token path: the sidecar's id for the phone that authenticated. */
     companionDevice?: string;
+    /** The caller proved the desktop app's own per-launch token (DESKTOP_OWNER_HEADER) from the app's page. */
+    desktopOwner?: true;
   }
   | { kind: "session"; session: SessionRecord; via: "bearer" | "cookie" | "ticket"; scopes: readonly Scope[] };
 
@@ -66,6 +68,26 @@ export function serviceAllowed(method: string, path: string): boolean {
  * never service-trust loopback (a shared server's bot shells) or a guest. */
 export function ownerOrAdmin(auth: RequestAuth): boolean {
   return auth.kind === "loopback" ? auth.trust !== "service" : auth.scopes.includes("admin");
+}
+
+/** Who may say yes to an Abel hard-gate card: the desktop app's own page, a verified phone companion, or a paired
+ * owner (admin) session. Never a session-less local caller, which includes every bot's shell. */
+export const ABEL_HARD_GATE_APPROVER = "This is an Abel hard gate: only the owner can approve it, in the desktop app or on a paired owner device. A local request without a session can only decline it.";
+
+export function mayApproveHardGate(auth: RequestAuth): boolean {
+  if (auth.kind === "loopback") return auth.desktopOwner === true || auth.companionDevice !== undefined;
+  return auth.scopes.includes("admin") && auth.session.label !== ABEL_LOCAL_CLIENT_LABEL;
+}
+
+/** The session `serve` keeps in the data dir for local tools (abel-client-token.ts). */
+export const ABEL_LOCAL_CLIENT_LABEL = "Abel local client";
+
+/** What that token may never do: anything that mints another credential (pairing, sessions, sign-in, tokens) or
+ * rewrites the server's settings, sign-in list included. */
+export function abelLocalClientRefused(method: string, path: string): boolean {
+  if (path === "/api/auth/session" || path === "/api/auth/logout" || path === "/api/auth/stream-ticket") return false;
+  if (path.startsWith("/api/auth/") || path === "/api/team/phone-pairing") return true;
+  return path === "/api/config" && !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 }
 
 /** Packaged desktop: `owner`. Else OMB_LOOPBACK_TRUST=owner|service; unset, a hosted workspace (any OMB_ADMIN_*)
@@ -662,6 +684,7 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
     }
     const narrowed = options.restricted?.(session, method, path, options.url) ?? null;
     if (narrowed) return deny(403, narrowed);
+    if (session.label === ABEL_LOCAL_CLIENT_LABEL && abelLocalClientRefused(method, path)) return deny(403, "forbidden: the local client token cannot pair devices, open sessions or change sign-in and settings");
     const needed = requiredScope(method, path, options.features ?? {});
     if (!session.scopes.includes(needed)) {
       return deny(403, options.scopeRefusal?.(method, path) ?? `forbidden: this session lacks the ${needed} scope`);
@@ -710,7 +733,7 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
       }
       return { auth: { kind: "loopback", scopes: SERVICE_SCOPES, trust: "service" }, status: 401, error: "" };
     }
-    return { auth: { kind: "loopback", scopes: LOOPBACK_SCOPES }, status: 401, error: "" };
+    return { auth: { kind: "loopback", scopes: LOOPBACK_SCOPES, ...(desktopOwner ? { desktopOwner: true as const } : {}) }, status: 401, error: "" };
   }
 
   if (proxied) {

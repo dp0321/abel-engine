@@ -1,3 +1,5 @@
+import { ABEL_DEFAULTS } from "./abel-defaults.ts";
+
 /** The approval levels exposed by the app. Each one is a provider's own
  * permission mode, passed through: OpenMausBot never decides a permission
  * itself (Full access aside, which answers residual prompts because that is
@@ -72,7 +74,7 @@ export function isApprovalMode(value: unknown): value is ApprovalMode {
  * access, as in t3code (its DEFAULT_RUNTIME_MODE). Each provider maps it to
  * its own most permissive mode; a real question or a missing credential
  * still reaches a person. */
-export const DEFAULT_APPROVAL_MODE: ApprovalMode = "full";
+export const DEFAULT_APPROVAL_MODE: ApprovalMode = ABEL_DEFAULTS.approvalMode;
 
 let defaultApprovalMode: ApprovalMode = DEFAULT_APPROVAL_MODE;
 

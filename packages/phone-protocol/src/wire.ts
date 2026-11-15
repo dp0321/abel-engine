@@ -659,6 +659,8 @@ export interface OptionCardData extends WaitCardField, ComputerAskField, AccessR
   stopped?: boolean;
   /** Catalog key for held when it is one of the fixed notes. */
   heldCode?: string;
+  /** An Abel hard gate (money, trade, live flip, mass send, credential): only the owner's own device may allow it. */
+  hardGate?: string;
   /** the narrow grant "always allow" remembers for a harness-native card. */
   allowKey?: string;
   /** the provider can remember an allow for the rest of its session. */
