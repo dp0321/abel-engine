@@ -1,4 +1,5 @@
 import nativeText from "./native-text.cjs";
+import abelNames from "./abel-copy.cjs";
 import { fileURLToPath } from "node:url";
 
 export const TALK_PANEL = Object.freeze({ width: 400, margin: 24, minHeight: 56, maxHeight: 240, fadeMs: 180 });
@@ -11,7 +12,8 @@ export const TALK_LABELS = Object.freeze({
   listening: "Listening…",
   sending: "Sending to MausBot…",
   thinking: "MausBot is thinking…",
-  reply: "MausBot",
+  // The reply's label is the helper's name; the app shows Abel's (plain-node tests read upstream's).
+  reply: abelNames.renames ? abelNames.abelCopy("native.talk.reply", "MausBot") : "MausBot",
   "needs-you": "MausBot needs you · Open chat",
   "still-working": "Still working · Open chat",
   error: "",

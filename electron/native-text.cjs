@@ -75,7 +75,7 @@ function createNativeText({ dir = LOCALES_DIR, saved = null, system = () => "", 
     t(key, params) {
       const own = pack(language())[key];
       const template = own ?? pack(ENGLISH)[key] ?? key;
-      return fill(abelNames.renames ? abelNames.abelCopy(key, template) : template, params);
+      return fill(abelNames.renames ? abelNames.abelCopy(key, template, own === undefined || language() === ENGLISH) : template, params);
     },
     set(code) {
       const before = language();

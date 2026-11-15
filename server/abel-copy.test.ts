@@ -37,6 +37,15 @@ describe("Abel Engine's names in upstream's copy", () => {
     expect(serverLine("en", "server.cloudComputer.restarted", { name: "Scout" })).toContain("so Abel Engine restarted it");
   });
 
+  it("writes English's \"an\" before the new names, and leaves another language's \"a\" alone", () => {
+    expect(abelCopy("settings.customThemes.importFailed", en["settings.customThemes.importFailed"])).toBe("This file is not an Abel Engine theme.");
+    expect(abelCopy("native.connect.desktopApp", en["native.connect.desktopApp"])).toContain("is an Abel Engine desktop app");
+    expect(abelCopy("native.talk.sending", "A MausBot reply", true)).toBe("An Abel Crew reply");
+    expect(abelCopy("native.talk.sending", "Envía a MausBot", false)).toBe("Envía a Abel Crew");
+    const left = Object.entries(en as Record<string, string>).filter(([key, text]) => /\b[Aa] Abel\b/.test(abelCopy(key, text))).map(([key]) => key);
+    expect(left).toEqual([]);
+  });
+
   it("keeps upstream's own services and team by name", () => {
     expect(abelCopy("cloudSetup.title", en["cloudSetup.title"])).toBe("Set up MausBot Cloud");
     expect(abelCopy("server.reports.sent", en["server.reports.sent"])).toBe(en["server.reports.sent"]);

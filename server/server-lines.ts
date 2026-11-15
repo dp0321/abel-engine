@@ -21,7 +21,8 @@ export function addServerLinePacks(more: Readonly<Record<string, Pack>>): void {
 /** The line in `language` (a language tag; undefined reads as English), with each `{name}` filled from `params`. A key
  * the language has no words for yet reads in English, as the app's own screens do. */
 export function serverLine(language: string | undefined, key: ServerLineKey, params?: Readonly<Record<string, string | number>>): string {
-  const template = abelCopy(key, byLanguage(packs, language)[key] ?? ENGLISH[key] ?? key);
+  const pack = byLanguage(packs, language);
+  const template = abelCopy(key, pack[key] ?? ENGLISH[key] ?? key, pack === ENGLISH || pack[key] === undefined);
   return params ? template.replace(/\{(\w+)\}/g, (match, name: string) => (Object.hasOwn(params, name) ? String(params[name]) : match)) : template;
 }
 
@@ -42,7 +43,7 @@ function matcherOf(template: string): RegExp {
 export function isServerLine(key: ServerLineKey, text: string): boolean {
   return Object.values(packs).some((pack) => {
     const template = pack[key];
-    return template !== undefined && (matcherOf(abelCopy(key, template)).test(text) || matcherOf(template).test(text));
+    return template !== undefined && (matcherOf(abelCopy(key, template, pack === ENGLISH)).test(text) || matcherOf(template).test(text));
   });
 }
 
